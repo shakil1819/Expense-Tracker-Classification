@@ -1,0 +1,386 @@
+{
+  "dataset": {
+    "record_count": 4894,
+    "unique_vendors": 337,
+    "unique_account_names": 103,
+    "labels_lt_10": 43,
+    "labels_lt_5": 34,
+    "singleton_labels": 16,
+    "missing_item_descriptions": 31,
+    "min_amount": -15195.0,
+    "max_amount": 161838000.0,
+    "top_accounts": [
+      [
+        "611202 Online Subscription/Tool",
+        1179
+      ],
+      [
+        "132098 IC Clearing account",
+        706
+      ],
+      [
+        "619203 Supplies/Expenses",
+        225
+      ],
+      [
+        "134001 Prepaid Operating Expense",
+        193
+      ],
+      [
+        "614123 Employee On Record",
+        175
+      ],
+      [
+        "132098 IC Clearing account - Paid on Behalf",
+        131
+      ],
+      [
+        "617103 Subcontractors/Outsource",
+        126
+      ],
+      [
+        "617205 Consultancy Expense",
+        121
+      ],
+      [
+        "619201 Equipment Expense",
+        114
+      ],
+      [
+        "619209 Others",
+        99
+      ]
+    ]
+  },
+  "baseline": {
+    "item_vendor_lookup_accuracy": 0.7425944841675178
+  },
+  "repeated": {
+    "random": {
+      "strategy": "random",
+      "n_splits": 5,
+      "test_size": 0.2,
+      "accuracy_mean": 0.9074565883554648,
+      "accuracy_std": 0.006670001110240861,
+      "weighted_f1_mean": 0.9043116459652276,
+      "macro_f1_mean": 0.7867560557199929
+    },
+    "group_item": {
+      "strategy": "group_item",
+      "n_splits": 5,
+      "test_size": 0.2,
+      "accuracy_mean": 0.8771383489465663,
+      "accuracy_std": 0.014963867060810942,
+      "weighted_f1_mean": 0.871210536042493,
+      "macro_f1_mean": 0.7339368245817155
+    }
+  },
+  "holdout": {
+    "random": {
+      "strategy": "random",
+      "accuracy": 0.9050051072522982,
+      "weighted_f1": 0.9018823084205758,
+      "macro_f1": 0.7733241779173791,
+      "train_size": 3915,
+      "test_size": 979,
+      "labels_in_test": 74,
+      "top_labels": [
+        {
+          "label": "511301 Display COGS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 15
+        },
+        {
+          "label": "511102 External Commission",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 10
+        },
+        {
+          "label": "617202 Legal Expenses",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "223001 Salaries Payable",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 6
+        },
+        {
+          "label": "232101 Lease payable",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 6
+        },
+        {
+          "label": "611101 Cloud server - AWS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 6
+        },
+        {
+          "label": "131020 Unbilled receivables",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        {
+          "label": "617101 Customer Support - Others",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        {
+          "label": "619202 Cleaning",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        {
+          "label": "617103 Subcontractors/Outsource",
+          "precision": 0.9666666666666667,
+          "recall": 1.0,
+          "f1": 0.9830508474576272,
+          "support": 29
+        }
+      ],
+      "bottom_labels": [
+        {
+          "label": "134004 Prepaid Subscription",
+          "precision": 0.5,
+          "recall": 0.3333333333333333,
+          "f1": 0.4,
+          "support": 6
+        },
+        {
+          "label": "134001 Prepaid Operating Expense",
+          "precision": 0.725,
+          "recall": 0.7073170731707317,
+          "f1": 0.7160493827160493,
+          "support": 41
+        },
+        {
+          "label": "612016 Collateral",
+          "precision": 0.8333333333333334,
+          "recall": 0.7142857142857143,
+          "f1": 0.7692307692307693,
+          "support": 7
+        },
+        {
+          "label": "619209 Others",
+          "precision": 0.9444444444444444,
+          "recall": 0.68,
+          "f1": 0.7906976744186046,
+          "support": 25
+        },
+        {
+          "label": "132098 IC Clearing account - Paid on Behalf",
+          "precision": 0.8695652173913043,
+          "recall": 0.7407407407407407,
+          "f1": 0.8,
+          "support": 27
+        },
+        {
+          "label": "134002 Prepaid Insurance",
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 6
+        },
+        {
+          "label": "612001 Paid Social",
+          "precision": 0.9333333333333333,
+          "recall": 0.8235294117647058,
+          "f1": 0.875,
+          "support": 17
+        },
+        {
+          "label": "614306 Other Employee Expenses",
+          "precision": 1.0,
+          "recall": 0.7777777777777778,
+          "f1": 0.875,
+          "support": 9
+        },
+        {
+          "label": "619207 Utilities",
+          "precision": 0.8461538461538461,
+          "recall": 0.9166666666666666,
+          "f1": 0.88,
+          "support": 12
+        },
+        {
+          "label": "619201 Equipment Expense",
+          "precision": 0.8846153846153846,
+          "recall": 0.8846153846153846,
+          "f1": 0.8846153846153846,
+          "support": 26
+        }
+      ]
+    },
+    "group_item": {
+      "strategy": "group_item",
+      "accuracy": 0.89171974522293,
+      "weighted_f1": 0.8832282192351786,
+      "macro_f1": 0.779665580704541,
+      "train_size": 3952,
+      "test_size": 942,
+      "labels_in_test": 71,
+      "top_labels": [
+        {
+          "label": "617103 Subcontractors/Outsource",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 40
+        },
+        {
+          "label": "511301 Display COGS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 12
+        },
+        {
+          "label": "612005 Giveaway",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 12
+        },
+        {
+          "label": "619206 Telephone & Internet",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 9
+        },
+        {
+          "label": "511102 External Commission",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "611103 Cloud server - Google",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "619518 Courier and postage",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "617101 Customer Support - Others",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 6
+        },
+        {
+          "label": "131020 Unbilled receivables",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        {
+          "label": "611101 Cloud server - AWS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        }
+      ],
+      "bottom_labels": [
+        {
+          "label": "612013 Others",
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 7
+        },
+        {
+          "label": "619515 Engagement",
+          "precision": 0.8571428571428571,
+          "recall": 0.5,
+          "f1": 0.631578947368421,
+          "support": 12
+        },
+        {
+          "label": "134001 Prepaid Operating Expense",
+          "precision": 0.7027027027027027,
+          "recall": 0.6666666666666666,
+          "f1": 0.6842105263157895,
+          "support": 39
+        },
+        {
+          "label": "142101 Office Equipment - Cost",
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727273,
+          "support": 6
+        },
+        {
+          "label": "132098 IC Clearing account - Paid on Behalf",
+          "precision": 0.8076923076923077,
+          "recall": 0.6774193548387096,
+          "f1": 0.7368421052631579,
+          "support": 31
+        },
+        {
+          "label": "617202 Legal Expenses",
+          "precision": 0.7777777777777778,
+          "recall": 0.7,
+          "f1": 0.7368421052631579,
+          "support": 10
+        },
+        {
+          "label": "617203 Tax Fee",
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 6
+        },
+        {
+          "label": "619210 Subscription",
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 6
+        },
+        {
+          "label": "612001 Paid Social",
+          "precision": 0.7647058823529411,
+          "recall": 0.8666666666666667,
+          "f1": 0.8125,
+          "support": 15
+        },
+        {
+          "label": "612002 Paid Search",
+          "precision": 0.8,
+          "recall": 0.8888888888888888,
+          "f1": 0.8421052631578947,
+          "support": 9
+        }
+      ]
+    }
+  }
+}
