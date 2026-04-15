@@ -56,33 +56,19 @@
     ]
   },
   "baseline": {
-    "item_vendor_lookup_accuracy": 0.745658835546476
+    "item_vendor_lookup_accuracy": 0.7415730337078652
   },
   "hyperparameter_tuning": {
     "best_C": 4.0,
     "best_class_weight": null,
+    "best_oversample_min_count": 0,
     "best_val_accuracy": 0.8809676843118492,
     "best_gap": 0.1116,
     "grid": [
       {
-        "C": 0.1,
-        "class_weight": "None",
-        "val_accuracy_mean": 0.8508334523550094,
-        "val_accuracy_std": 0.018095647408672207,
-        "train_accuracy_mean": 0.9522333765158478,
-        "gap_mean": 0.1014
-      },
-      {
-        "C": 0.25,
-        "class_weight": "None",
-        "val_accuracy_mean": 0.8658763586445769,
-        "val_accuracy_std": 0.017836766351669763,
-        "train_accuracy_mean": 0.9748638861532978,
-        "gap_mean": 0.109
-      },
-      {
         "C": 0.5,
         "class_weight": "None",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8757229875337117,
         "val_accuracy_std": 0.017445141973076738,
         "train_accuracy_mean": 0.9845009098634743,
@@ -91,6 +77,7 @@
       {
         "C": 1.0,
         "class_weight": "None",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8771383489465663,
         "val_accuracy_std": 0.014963867060810942,
         "train_accuracy_mean": 0.9887362226897427,
@@ -99,6 +86,7 @@
       {
         "C": 2.0,
         "class_weight": "None",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8784212484687733,
         "val_accuracy_std": 0.014921416034414514,
         "train_accuracy_mean": 0.990929811226789,
@@ -107,6 +95,7 @@
       {
         "C": 4.0,
         "class_weight": "None",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8809676843118492,
         "val_accuracy_std": 0.017593562859816413,
         "train_accuracy_mean": 0.9926089615593334,
@@ -115,38 +104,16 @@
       {
         "C": 8.0,
         "class_weight": "None",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8799773255281019,
         "val_accuracy_std": 0.016126437916046715,
         "train_accuracy_mean": 0.9935264114320184,
         "gap_mean": 0.1135
       },
       {
-        "C": 16.0,
-        "class_weight": "None",
-        "val_accuracy_mean": 0.8762019593689396,
-        "val_accuracy_std": 0.013645311691485706,
-        "train_accuracy_mean": 0.994242488263372,
-        "gap_mean": 0.118
-      },
-      {
-        "C": 0.1,
-        "class_weight": "balanced",
-        "val_accuracy_mean": 0.8288578349378009,
-        "val_accuracy_std": 0.020539892153895158,
-        "train_accuracy_mean": 0.9211741797374101,
-        "gap_mean": 0.0923
-      },
-      {
-        "C": 0.25,
-        "class_weight": "balanced",
-        "val_accuracy_mean": 0.8558712790711291,
-        "val_accuracy_std": 0.020402949284622666,
-        "train_accuracy_mean": 0.9552371428106312,
-        "gap_mean": 0.0994
-      },
-      {
         "C": 0.5,
         "class_weight": "balanced",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8670972378465912,
         "val_accuracy_std": 0.017794782637632497,
         "train_accuracy_mean": 0.9678876351544966,
@@ -155,6 +122,7 @@
       {
         "C": 1.0,
         "class_weight": "balanced",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8719063335054521,
         "val_accuracy_std": 0.01836123348778229,
         "train_accuracy_mean": 0.9772108947771734,
@@ -163,6 +131,7 @@
       {
         "C": 2.0,
         "class_weight": "balanced",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8739430620528259,
         "val_accuracy_std": 0.01464116203814213,
         "train_accuracy_mean": 0.9830804266143082,
@@ -171,6 +140,7 @@
       {
         "C": 4.0,
         "class_weight": "balanced",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8768208013363574,
         "val_accuracy_std": 0.014849495213964765,
         "train_accuracy_mean": 0.9860847551803674,
@@ -179,18 +149,191 @@
       {
         "C": 8.0,
         "class_weight": "balanced",
+        "oversample_min_count": 0,
         "val_accuracy_mean": 0.8792851015710312,
         "val_accuracy_std": 0.017004560539156888,
         "train_accuracy_mean": 0.9896537209463343,
         "gap_mean": 0.1104
       },
       {
-        "C": 16.0,
+        "C": 0.5,
+        "class_weight": "None",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8757410240178778,
+        "val_accuracy_std": 0.01572730014196497,
+        "train_accuracy_mean": 0.985702170156955,
+        "gap_mean": 0.11
+      },
+      {
+        "C": 1.0,
+        "class_weight": "None",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8758824908403504,
+        "val_accuracy_std": 0.014920660267260664,
+        "train_accuracy_mean": 0.9891820536449227,
+        "gap_mean": 0.1133
+      },
+      {
+        "C": 2.0,
+        "class_weight": "None",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8782190480609648,
+        "val_accuracy_std": 0.015514441377915812,
+        "train_accuracy_mean": 0.9911187481030985,
+        "gap_mean": 0.1129
+      },
+      {
+        "C": 4.0,
+        "class_weight": "None",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8801456305761943,
+        "val_accuracy_std": 0.016268716401414474,
+        "train_accuracy_mean": 0.9928534228558169,
+        "gap_mean": 0.1127
+      },
+      {
+        "C": 8.0,
+        "class_weight": "None",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8781003675214061,
+        "val_accuracy_std": 0.014969805275529966,
+        "train_accuracy_mean": 0.9934485329597367,
+        "gap_mean": 0.1153
+      },
+      {
+        "C": 0.5,
         "class_weight": "balanced",
-        "val_accuracy_mean": 0.8796906834561247,
-        "val_accuracy_std": 0.015985742924054785,
-        "train_accuracy_mean": 0.992303110508361,
-        "gap_mean": 0.1126
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8677320121531977,
+        "val_accuracy_std": 0.017843874123461143,
+        "train_accuracy_mean": 0.9691296190851894,
+        "gap_mean": 0.1014
+      },
+      {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8710773938042384,
+        "val_accuracy_std": 0.01803221885138279,
+        "train_accuracy_mean": 0.9779591028246213,
+        "gap_mean": 0.1069
+      },
+      {
+        "C": 2.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8741352208274463,
+        "val_accuracy_std": 0.014058785652068327,
+        "train_accuracy_mean": 0.9835739281857234,
+        "gap_mean": 0.1094
+      },
+      {
+        "C": 4.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8776192846803935,
+        "val_accuracy_std": 0.016108228448930943,
+        "train_accuracy_mean": 0.9865499431455212,
+        "gap_mean": 0.1089
+      },
+      {
+        "C": 8.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 5,
+        "val_accuracy_mean": 0.8792637891124746,
+        "val_accuracy_std": 0.016326121477913347,
+        "train_accuracy_mean": 0.9898766653459088,
+        "gap_mean": 0.1106
+      },
+      {
+        "C": 0.5,
+        "class_weight": "None",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8759781872290173,
+        "val_accuracy_std": 0.015051929170455466,
+        "train_accuracy_mean": 0.9868954796797634,
+        "gap_mean": 0.1109
+      },
+      {
+        "C": 1.0,
+        "class_weight": "None",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8767397425915412,
+        "val_accuracy_std": 0.01406190715592591,
+        "train_accuracy_mean": 0.9898328439267111,
+        "gap_mean": 0.1131
+      },
+      {
+        "C": 2.0,
+        "class_weight": "None",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8784358206094668,
+        "val_accuracy_std": 0.01583694766343727,
+        "train_accuracy_mean": 0.9915841891586051,
+        "gap_mean": 0.1131
+      },
+      {
+        "C": 4.0,
+        "class_weight": "None",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8797300323988473,
+        "val_accuracy_std": 0.015301537985821196,
+        "train_accuracy_mean": 0.9931901743904528,
+        "gap_mean": 0.1135
+      },
+      {
+        "C": 8.0,
+        "class_weight": "None",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.877685902290831,
+        "val_accuracy_std": 0.013754132587934948,
+        "train_accuracy_mean": 0.9937101230050029,
+        "gap_mean": 0.116
+      },
+      {
+        "C": 0.5,
+        "class_weight": "balanced",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.868585962589064,
+        "val_accuracy_std": 0.017023563453628546,
+        "train_accuracy_mean": 0.9706781316529796,
+        "gap_mean": 0.1021
+      },
+      {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8715042881478883,
+        "val_accuracy_std": 0.01776752485044768,
+        "train_accuracy_mean": 0.9794209223033891,
+        "gap_mean": 0.1079
+      },
+      {
+        "C": 2.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8751980224244746,
+        "val_accuracy_std": 0.013618507738409348,
+        "train_accuracy_mean": 0.9844423692053683,
+        "gap_mean": 0.1092
+      },
+      {
+        "C": 4.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8778450875016546,
+        "val_accuracy_std": 0.0159018225390465,
+        "train_accuracy_mean": 0.9873259006686022,
+        "gap_mean": 0.1095
+      },
+      {
+        "C": 8.0,
+        "class_weight": "balanced",
+        "oversample_min_count": 10,
+        "val_accuracy_mean": 0.8786325513333979,
+        "val_accuracy_std": 0.01452635431808222,
+        "train_accuracy_mean": 0.9904476477252911,
+        "gap_mean": 0.1118
       }
     ]
   },
@@ -205,6 +348,33 @@
       "train_size": 3915,
       "test_size": 979,
       "labels_in_test": 74,
+      "error_analysis_by_frequency": {
+        "singleton (n=1)": {
+          "accuracy": 0.75,
+          "correct": 3,
+          "total": 4
+        },
+        "very_rare (2-4)": {
+          "accuracy": 0.7143,
+          "correct": 10,
+          "total": 14
+        },
+        "rare (5-19)": {
+          "accuracy": 0.8391,
+          "correct": 73,
+          "total": 87
+        },
+        "medium (20-99)": {
+          "accuracy": 0.918,
+          "correct": 336,
+          "total": 366
+        },
+        "frequent (100+)": {
+          "accuracy": 0.9206,
+          "correct": 464,
+          "total": 504
+        }
+      },
       "top_labels": [
         {
           "label": "511301 Display COGS",
@@ -360,6 +530,33 @@
       "train_size": 3952,
       "test_size": 942,
       "labels_in_test": 71,
+      "error_analysis_by_frequency": {
+        "singleton (n=1)": {
+          "accuracy": 1.0,
+          "correct": 3,
+          "total": 3
+        },
+        "very_rare (2-4)": {
+          "accuracy": 0.7143,
+          "correct": 5,
+          "total": 7
+        },
+        "rare (5-19)": {
+          "accuracy": 0.7692,
+          "correct": 70,
+          "total": 91
+        },
+        "medium (20-99)": {
+          "accuracy": 0.9169,
+          "correct": 287,
+          "total": 313
+        },
+        "frequent (100+)": {
+          "accuracy": 0.9048,
+          "correct": 475,
+          "total": 525
+        }
+      },
       "top_labels": [
         {
           "label": "617103 Subcontractors/Outsource",
@@ -515,6 +712,33 @@
       "train_size": 3952,
       "test_size": 942,
       "labels_in_test": 71,
+      "error_analysis_by_frequency": {
+        "singleton (n=1)": {
+          "accuracy": 1.0,
+          "correct": 3,
+          "total": 3
+        },
+        "very_rare (2-4)": {
+          "accuracy": 0.7143,
+          "correct": 5,
+          "total": 7
+        },
+        "rare (5-19)": {
+          "accuracy": 0.8132,
+          "correct": 74,
+          "total": 91
+        },
+        "medium (20-99)": {
+          "accuracy": 0.9169,
+          "correct": 287,
+          "total": 313
+        },
+        "frequent (100+)": {
+          "accuracy": 0.9143,
+          "correct": 480,
+          "total": 525
+        }
+      },
       "top_labels": [
         {
           "label": "617103 Subcontractors/Outsource",
@@ -703,12 +927,14 @@
     "test_size": 192,
     "samples_per_class": 3,
     "min_train_size": 5,
-    "train_accuracy": 0.9886703719538265,
+    "train_accuracy": 0.9923044035912784,
     "accuracy": 0.8385416666666666,
-    "accuracy_gap": 0.15012870528715982,
-    "weighted_f1": 0.8285905067155066,
-    "macro_f1": 0.8034817034817033,
+    "accuracy_gap": 0.15376273692461173,
+    "weighted_f1": 0.8270280067155068,
+    "macro_f1": 0.801966551966552,
+    "C": 4.0,
     "class_weight": null,
+    "oversample_min_count": 0,
     "class_balance_check": {
       "min_test_support": 3,
       "max_test_support": 3
@@ -720,63 +946,72 @@
     "samples_per_class": 3,
     "min_train_size": 5,
     "eligible_labels_mean": 64.0,
-    "default_model": {
-      "accuracy_mean": 0.8354166666666668,
-      "accuracy_std": 0.02046550281707135,
-      "macro_f1_mean": 0.8072061134771381,
-      "weighted_f1_mean": 0.8218046189921189,
-      "accuracy_gap_mean": 0.1534458786933331
+    "tuned_model": {
+      "C": 4.0,
+      "class_weight": null,
+      "oversample_min_count": 0,
+      "accuracy_mean": 0.8354166666666666,
+      "accuracy_std": 0.016989069198229272,
+      "macro_f1_mean": 0.8029227212809301,
+      "weighted_f1_mean": 0.822777084027084,
+      "accuracy_gap_mean": 0.15698786059464415
     },
     "class_weight_balanced_model": {
-      "accuracy_mean": 0.853125,
-      "accuracy_std": 0.019598841377319553,
-      "macro_f1_mean": 0.8103076891847344,
-      "weighted_f1_mean": 0.840298971861472,
-      "accuracy_gap_mean": 0.12310764243312604
+      "C": 4.0,
+      "class_weight": "balanced",
+      "oversample_min_count": 0,
+      "accuracy_mean": 0.8479166666666668,
+      "accuracy_std": 0.010622957319984966,
+      "macro_f1_mean": 0.8154599235630442,
+      "weighted_f1_mean": 0.8356387536075036,
+      "accuracy_gap_mean": 0.13787365467089427
     }
   },
   "diagnostics": {
     "fit_assessment": {
       "underfitting": false,
       "overfitting": true,
-      "train_accuracy": 0.9881072874493927,
-      "grouped_val_accuracy": 0.89171974522293,
-      "gap": 0.09638754222646273,
-      "summary": "Train accuracy 0.988, grouped val accuracy 0.892, gap 0.096. No underfitting. Moderate overfitting \u2014 gap 0.096 exceeds 0.05 threshold. Cause: LinearSVC with high-dimensional TF-IDF memorises training phrase patterns. Fix: tune C via grouped CV to find optimal bias-variance trade-off."
+      "C": 4.0,
+      "class_weight": null,
+      "oversample_min_count": 0,
+      "train_accuracy": 0.9924089068825911,
+      "grouped_val_accuracy": 0.9012738853503185,
+      "gap": 0.0911350215322726,
+      "summary": "Train accuracy 0.992, grouped val accuracy 0.901, gap 0.091. No underfitting. Moderate overfitting \u2014 gap 0.091 exceeds 0.05 threshold. Cause: LinearSVC with high-dimensional TF-IDF memorises training phrase patterns. Fix: tune C via grouped CV to find optimal bias-variance trade-off."
     },
     "train_test_gap": {
       "random_holdout_train_accuracy": 0.9895274584929757,
       "random_holdout_test_accuracy": 0.9050051072522982,
       "random_holdout_gap": 0.08452235124067753,
-      "group_holdout_train_accuracy": 0.9881072874493927,
-      "group_holdout_test_accuracy": 0.89171974522293,
-      "group_holdout_gap": 0.09638754222646273
+      "group_holdout_train_accuracy": 0.9924089068825911,
+      "group_holdout_test_accuracy": 0.9012738853503185,
+      "group_holdout_gap": 0.0911350215322726
     },
     "learning_curve": [
       {
         "train_size": 790,
-        "train_accuracy": 0.9848101265822785,
-        "validation_accuracy": 0.589525889296282
+        "train_accuracy": 0.9911392405063291,
+        "validation_accuracy": 0.5807022005595583
       },
       {
         "train_size": 1580,
-        "train_accuracy": 0.9858649789029537,
-        "validation_accuracy": 0.7169709430820251
+        "train_accuracy": 0.9900843881856539,
+        "validation_accuracy": 0.6996824387357061
       },
       {
         "train_size": 2371,
-        "train_accuracy": 0.9849571207647969,
-        "validation_accuracy": 0.7930272182308987
+        "train_accuracy": 0.9905806270209476,
+        "validation_accuracy": 0.7850071669714557
       },
       {
         "train_size": 3161,
-        "train_accuracy": 0.9850258357060002,
-        "validation_accuracy": 0.8473748521835097
+        "train_accuracy": 0.9898766213223663,
+        "validation_accuracy": 0.8469707357387293
       },
       {
         "train_size": 3952,
-        "train_accuracy": 0.9865842673847186,
-        "validation_accuracy": 0.8773398772386631
+        "train_accuracy": 0.9906604593023959,
+        "validation_accuracy": 0.8794349292640143
       }
     ],
     "validation_curve": [
@@ -829,8 +1064,8 @@
         "labels_lt_3_samples": 21,
         "singleton_labels": 16,
         "warning": "Some classes have fewer than 3 samples, so full-dataset StratifiedGroupKFold is not fully feasible.",
-        "stratified_group_kfold_accuracy_mean": 0.8765796974055052,
-        "stratified_group_kfold_accuracy_std": 0.012349111447559971
+        "stratified_group_kfold_accuracy_mean": 0.8782171919736969,
+        "stratified_group_kfold_accuracy_std": 0.009464695891409466
       }
     }
   }

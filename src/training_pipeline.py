@@ -424,7 +424,9 @@ def evaluate_balanced_holdout(
     samples_per_class: int = 3,
     min_train_size: int = 5,
     random_state: int = 42,
+    C: float = 1.0,
     class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> dict[str, object]:
     split = build_balanced_unseen_holdout(
         records,
@@ -435,7 +437,9 @@ def evaluate_balanced_holdout(
     scored = _fit_and_score(
         split.train_records,
         split.test_records,
+        C=C,
         class_weight=class_weight,
+        oversample_min_count=oversample_min_count,
     )
     label_counts = Counter(record.account_name for record in split.test_records)
     return {
@@ -450,7 +454,9 @@ def evaluate_balanced_holdout(
         "accuracy_gap": scored["train_accuracy"] - scored["test_accuracy"],
         "weighted_f1": scored["weighted_f1"],
         "macro_f1": scored["macro_f1"],
+        "C": C,
         "class_weight": class_weight,
+        "oversample_min_count": oversample_min_count,
         "class_balance_check": {
             "min_test_support": min(label_counts.values()),
             "max_test_support": max(label_counts.values()),
@@ -465,10 +471,13 @@ def evaluate_repeated_balanced_holdout(
     min_train_size: int = 5,
     random_state: int = 42,
     repeats: int = 5,
+    C: float = 1.0,
+    class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> dict[str, object]:
-    production_results: list[SplitResult] = []
-    balanced_weight_results: list[SplitResult] = []
-    gaps_default: list[float] = []
+    tuned_results: list[SplitResult] = []
+    class_weight_balanced_results: list[SplitResult] = []
+    gaps_tuned: list[float] = []
     gaps_balanced: list[float] = []
     eligible_label_counts: list[int] = []
     for offset in range(repeats):
@@ -480,22 +489,30 @@ def evaluate_repeated_balanced_holdout(
         )
         eligible_label_counts.append(len(split.eligible_labels))
 
-        scored_default = _fit_and_score(split.train_records, split.test_records, class_weight=None)
-        production_results.append(
+        scored_tuned = _fit_and_score(
+            split.train_records,
+            split.test_records,
+            C=C,
+            class_weight=class_weight,
+            oversample_min_count=oversample_min_count,
+        )
+        tuned_results.append(
             SplitResult(
-                accuracy=scored_default["test_accuracy"],
-                weighted_f1=scored_default["weighted_f1"],
-                macro_f1=scored_default["macro_f1"],
+                accuracy=scored_tuned["test_accuracy"],
+                weighted_f1=scored_tuned["weighted_f1"],
+                macro_f1=scored_tuned["macro_f1"],
             )
         )
-        gaps_default.append(scored_default["train_accuracy"] - scored_default["test_accuracy"])
+        gaps_tuned.append(scored_tuned["train_accuracy"] - scored_tuned["test_accuracy"])
 
         scored_balanced = _fit_and_score(
             split.train_records,
             split.test_records,
+            C=C,
             class_weight="balanced",
+            oversample_min_count=oversample_min_count,
         )
-        balanced_weight_results.append(
+        class_weight_balanced_results.append(
             SplitResult(
                 accuracy=scored_balanced["test_accuracy"],
                 weighted_f1=scored_balanced["weighted_f1"],
@@ -510,38 +527,56 @@ def evaluate_repeated_balanced_holdout(
         "samples_per_class": samples_per_class,
         "min_train_size": min_train_size,
         "eligible_labels_mean": float(np.mean(eligible_label_counts)),
-        "default_model": {
-            "accuracy_mean": float(np.mean([result.accuracy for result in production_results])),
-            "accuracy_std": float(np.std([result.accuracy for result in production_results])),
-            "macro_f1_mean": float(np.mean([result.macro_f1 for result in production_results])),
+        "tuned_model": {
+            "C": C,
+            "class_weight": class_weight,
+            "oversample_min_count": oversample_min_count,
+            "accuracy_mean": float(np.mean([result.accuracy for result in tuned_results])),
+            "accuracy_std": float(np.std([result.accuracy for result in tuned_results])),
+            "macro_f1_mean": float(np.mean([result.macro_f1 for result in tuned_results])),
             "weighted_f1_mean": float(
-                np.mean([result.weighted_f1 for result in production_results])
+                np.mean([result.weighted_f1 for result in tuned_results])
             ),
-            "accuracy_gap_mean": float(np.mean(gaps_default)),
+            "accuracy_gap_mean": float(np.mean(gaps_tuned)),
         },
         "class_weight_balanced_model": {
-            "accuracy_mean": float(np.mean([result.accuracy for result in balanced_weight_results])),
-            "accuracy_std": float(np.std([result.accuracy for result in balanced_weight_results])),
+            "C": C,
+            "class_weight": "balanced",
+            "oversample_min_count": oversample_min_count,
+            "accuracy_mean": float(np.mean([result.accuracy for result in class_weight_balanced_results])),
+            "accuracy_std": float(np.std([result.accuracy for result in class_weight_balanced_results])),
             "macro_f1_mean": float(
-                np.mean([result.macro_f1 for result in balanced_weight_results])
+                np.mean([result.macro_f1 for result in class_weight_balanced_results])
             ),
             "weighted_f1_mean": float(
-                np.mean([result.weighted_f1 for result in balanced_weight_results])
+                np.mean([result.weighted_f1 for result in class_weight_balanced_results])
             ),
             "accuracy_gap_mean": float(np.mean(gaps_balanced)),
         },
     }
 
 
-def compute_overfitting_diagnostics(records: list[ExpenseRecord]) -> dict[str, object]:
+def compute_overfitting_diagnostics(
+    records: list[ExpenseRecord],
+    *,
+    C: float = 1.0,
+    class_weight: str | None = None,
+    oversample_min_count: int = 0,
+) -> dict[str, object]:
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
 
     random_holdout = evaluate_holdout(records, strategy="random")
-    grouped_holdout = evaluate_holdout(records, strategy="group_item")
+    grouped_holdout = evaluate_holdout(
+        records,
+        strategy="group_item",
+        C=C,
+        class_weight=class_weight,
+        oversample_min_count=oversample_min_count,
+    )
 
     learning_sizes, train_scores, validation_scores = learning_curve(
-        build_classifier(),
+        build_classifier(C=C, class_weight=class_weight),
         examples,
         labels,
         cv=GroupShuffleSplit(n_splits=3, test_size=0.2, random_state=42),
@@ -553,7 +588,7 @@ def compute_overfitting_diagnostics(records: list[ExpenseRecord]) -> dict[str, o
 
     param_range = [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
     train_curve, validation_curve_scores = validation_curve(
-        build_classifier(),
+        build_classifier(class_weight=class_weight),
         examples,
         labels,
         param_name="classifier__C",
@@ -575,7 +610,13 @@ def compute_overfitting_diagnostics(records: list[ExpenseRecord]) -> dict[str, o
         )
         for train_idx, test_idx in sgkf.split(indices, labels, groups):
             train_records, test_records = split_records_by_indices(records, train_idx, test_idx)
-            scored = _fit_and_score(train_records, test_records)
+            scored = _fit_and_score(
+                train_records,
+                test_records,
+                C=C,
+                class_weight=class_weight,
+                oversample_min_count=oversample_min_count,
+            )
             sgkf_scores.append(scored["test_accuracy"])
 
     group_val_acc = grouped_holdout["accuracy"]
@@ -587,6 +628,9 @@ def compute_overfitting_diagnostics(records: list[ExpenseRecord]) -> dict[str, o
         "fit_assessment": {
             "underfitting": is_underfitting,
             "overfitting": is_overfitting,
+            "C": C,
+            "class_weight": class_weight,
+            "oversample_min_count": oversample_min_count,
             "train_accuracy": group_train_acc,
             "grouped_val_accuracy": group_val_acc,
             "gap": group_gap,
@@ -722,12 +766,15 @@ def render_results_markdown(summary: dict[str, object]) -> str:
 
 ## Executive Summary
 
-LinearSVC on word TF-IDF, char TF-IDF, vendor one-hot, and log-scaled amount. Overfitting is confirmed (train-test gap ≈ {fit['gap']:.2f}). The fix is grouped cross-validation tuning of `C` and `class_weight` to find the best bias-variance trade-off. The tuned model (C={tuning['best_C']}, class_weight={tuning['best_class_weight']}) achieves grouped holdout accuracy of {natural_group_tuned['accuracy']:.4f}, up from {natural_group['accuracy']:.4f} with defaults.
+LinearSVC on word TF-IDF, char TF-IDF, vendor one-hot, and log-scaled amount. Overfitting is confirmed on the tuned configuration (train-test gap ≈ {fit['gap']:.2f}). The fix is grouped cross-validation tuning of `C`, `class_weight`, and `oversample_min_count` to find the best bias-variance trade-off. The tuned model (C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']}) achieves grouped holdout accuracy of {natural_group_tuned['accuracy']:.4f}, up from {natural_group['accuracy']:.4f} with defaults.
 
 ## Bias / Variance / Overfitting Diagnosis
 
 - **Underfitting**: {fit['underfitting']}
 - **Overfitting**: {fit['overfitting']}
+- **Tuned C**: {fit['C']}
+- **Tuned class_weight**: {fit['class_weight']}
+- **Tuned oversample_min_count**: {fit['oversample_min_count']}
 - **Train accuracy**: {fit['train_accuracy']:.4f}
 - **Grouped val accuracy**: {fit['grouped_val_accuracy']:.4f}
 - **Gap**: {fit['gap']:.4f}
@@ -796,8 +843,8 @@ Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversamp
 - Samples per class: {balanced_single['samples_per_class']}
 - Balanced holdout accuracy: {balanced_single['accuracy']:.4f}
 - Balanced holdout macro F1: {balanced_single['macro_f1']:.4f}
-- Repeated balanced accuracy mean with default model: {balanced_repeated['default_model']['accuracy_mean']:.4f} +/- {balanced_repeated['default_model']['accuracy_std']:.4f}
-- Repeated balanced macro F1 mean with default model: {balanced_repeated['default_model']['macro_f1_mean']:.4f}
+- Repeated balanced accuracy mean with tuned model: {balanced_repeated['tuned_model']['accuracy_mean']:.4f} +/- {balanced_repeated['tuned_model']['accuracy_std']:.4f}
+- Repeated balanced macro F1 mean with tuned model: {balanced_repeated['tuned_model']['macro_f1_mean']:.4f}
 - Repeated balanced accuracy mean with `class_weight='balanced'`: {balanced_repeated['class_weight_balanced_model']['accuracy_mean']:.4f}
 - Repeated balanced macro F1 mean with `class_weight='balanced'`: {balanced_repeated['class_weight_balanced_model']['macro_f1_mean']:.4f}
 
@@ -865,9 +912,24 @@ def run_training_pipeline(data_path: str = DATA_PATH) -> dict[str, object]:
                 oversample_min_count=best_omc,
             ),
         },
-        "balanced_holdout": evaluate_balanced_holdout(records),
-        "balanced_repeated": evaluate_repeated_balanced_holdout(records),
-        "diagnostics": compute_overfitting_diagnostics(records),
+        "balanced_holdout": evaluate_balanced_holdout(
+            records,
+            C=best_C,
+            class_weight=best_cw,
+            oversample_min_count=best_omc,
+        ),
+        "balanced_repeated": evaluate_repeated_balanced_holdout(
+            records,
+            C=best_C,
+            class_weight=best_cw,
+            oversample_min_count=best_omc,
+        ),
+        "diagnostics": compute_overfitting_diagnostics(
+            records,
+            C=best_C,
+            class_weight=best_cw,
+            oversample_min_count=best_omc,
+        ),
     }
     model = fit_full_model(records, C=best_C, class_weight=best_cw, oversample_min_count=best_omc)
     write_json("artifacts/evaluation_summary.json", summary)

@@ -3,6 +3,7 @@ from src.training_pipeline import (
     analyze_errors_by_class_frequency,
     baseline_lookup_accuracy,
     build_balanced_unseen_holdout,
+    compute_overfitting_diagnostics,
     evaluate_balanced_holdout,
     evaluate_holdout,
     evaluate_repeated_splits,
@@ -46,6 +47,14 @@ def test_balanced_holdout_is_reasonable() -> None:
     result = evaluate_balanced_holdout(records)
     assert result["eligible_labels"] >= 50
     assert result["accuracy"] >= 0.80
+
+
+def test_balanced_holdout_reports_requested_model_params() -> None:
+    records = load_records("accounts-bills.json")
+    result = evaluate_balanced_holdout(records, C=4.0, class_weight=None, oversample_min_count=0)
+    assert result["C"] == 4.0
+    assert result["class_weight"] is None
+    assert result["oversample_min_count"] == 0
 
 
 def test_resample_minority_classes_reaches_min_count() -> None:
@@ -116,3 +125,17 @@ def test_tuned_group_holdout_meets_target() -> None:
         oversample_min_count=tuning["best_oversample_min_count"],
     )
     assert result["accuracy"] >= 0.85
+
+
+def test_diagnostics_use_requested_model_params() -> None:
+    records = load_records("accounts-bills.json")
+    diagnostics = compute_overfitting_diagnostics(
+        records,
+        C=4.0,
+        class_weight=None,
+        oversample_min_count=0,
+    )
+    fit = diagnostics["fit_assessment"]
+    assert fit["C"] == 4.0
+    assert fit["class_weight"] is None
+    assert fit["oversample_min_count"] == 0
