@@ -12,4 +12,4 @@ dependencies = [
 ]
 
 [project.scripts]
-peakflo = "peakflo.cli:main"
+peakflo = "src.training_pipeline:main"

@@ -1,4 +1,4 @@
-from peakflo.cli import main
+from src.training_pipeline import main
 
 
 if __name__ == "__main__":

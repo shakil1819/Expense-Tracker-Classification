@@ -1,4 +1,4 @@
-from peakflo.data import build_text, load_records, normalize_text
+from src.feature_engineering_pipeline import build_text, load_records, normalize_text
 
 
 def test_normalize_text_collapses_whitespace_and_lowercases() -> None:

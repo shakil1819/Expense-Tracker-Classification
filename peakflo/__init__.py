@@ -1,2 +1,0 @@
-"""Peakflo expense classification package."""
-
