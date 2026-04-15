@@ -11,3 +11,5 @@ wheels/
 .docs/
 *.lock
 ##
+AGENTS.md
+CLAUDE.md
