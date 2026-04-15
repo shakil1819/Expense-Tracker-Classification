@@ -2,60 +2,64 @@
 
 ## Executive Summary
 
-The final model is a linear SVM over word n-grams, character n-grams, vendor ID, and log-scaled amount. It comfortably clears the 85% target on both a standard shuffled split and a stricter grouped split that keeps normalized `itemName` values out of both train and test.
+The model is a sparse linear SVM over TF-IDF text features, vendor ID, and log-scaled amount. It is not underfitting. It does show moderate overfitting because training accuracy is near 0.99 while grouped unseen accuracy is about 0.88 to 0.89. That level is acceptable for this task, but it means row-level random splits are too optimistic.
 
-## Data Analysis
+## Why The Split Strategy Changed
+
+- Random row splits overstate performance because repeated `itemName` patterns can leak into both train and test.
+- Grouped splits by normalized `itemName` are the better primary estimate for unseen transactions.
+- A fully stratified grouped split is not reliable on the full dataset because 16 labels are singletons and 21 labels have fewer than 3 rows.
+- A balanced unseen benchmark is useful, but it is a stress test for class fairness, not a replacement for production-like evaluation.
+
+## Dataset Constraints
 
 - Records: 4894
-- Unique vendors: 337
 - Unique account names: 103
-- Labels with fewer than 10 rows: 43
-- Singleton labels: 16
+- Labels with fewer than 5 rows: 34
+- Labels with one unique normalized item: 18
 - Missing descriptions: 31
-- Amount range: -15195.0 to 161838000.0
-- Exact item-name lookup baseline accuracy: 0.7426
 
-## Validation
+## Natural Distribution Metrics
 
-- Repeated shuffled holdout accuracy: 0.9075 +/- 0.0067
-- Repeated shuffled holdout macro F1: 0.7868
-- Repeated grouped holdout accuracy: 0.8771 +/- 0.0150
-- Repeated grouped holdout macro F1: 0.7339
-- Single shuffled holdout accuracy: 0.9050
-- Single grouped holdout accuracy: 0.8917
+- Random holdout accuracy: 0.9050
+- Grouped holdout accuracy: 0.8917
+- Repeated grouped accuracy mean: 0.8771 +/- 0.0150
+- Grouped holdout macro F1: 0.7797
+- Grouped train-test gap: 0.0964
 
-## Strongest Labels
+## Balanced Unseen Benchmark
 
-| Label | F1 | Precision | Recall | Support |
-| --- | ---: | ---: | ---: | ---: |
-| 511301 Display COGS | 1.000 | 1.000 | 1.000 | 15 |
-| 511102 External Commission | 1.000 | 1.000 | 1.000 | 10 |
-| 617202 Legal Expenses | 1.000 | 1.000 | 1.000 | 8 |
-| 223001 Salaries Payable | 1.000 | 1.000 | 1.000 | 6 |
-| 232101 Lease payable | 1.000 | 1.000 | 1.000 | 6 |
-| 611101 Cloud server - AWS | 1.000 | 1.000 | 1.000 | 6 |
-| 131020 Unbilled receivables | 1.000 | 1.000 | 1.000 | 5 |
-| 617101 Customer Support - Others | 1.000 | 1.000 | 1.000 | 5 |
-| 619202 Cleaning | 1.000 | 1.000 | 1.000 | 5 |
-| 617103 Subcontractors/Outsource | 0.983 | 0.967 | 1.000 | 29 |
+- Eligible labels: 64
+- Samples per class: 3
+- Balanced holdout accuracy: 0.8385
+- Balanced holdout macro F1: 0.8035
+- Repeated balanced accuracy mean with default model: 0.8354 +/- 0.0205
+- Repeated balanced macro F1 mean with default model: 0.8072
+- Repeated balanced accuracy mean with `class_weight='balanced'`: 0.8531
+- Repeated balanced macro F1 mean with `class_weight='balanced'`: 0.8103
 
-## Weakest Labels
+## Learning Curve
 
-| Label | F1 | Precision | Recall | Support |
-| --- | ---: | ---: | ---: | ---: |
-| 134004 Prepaid Subscription | 0.400 | 0.500 | 0.333 | 6 |
-| 134001 Prepaid Operating Expense | 0.716 | 0.725 | 0.707 | 41 |
-| 612016 Collateral | 0.769 | 0.833 | 0.714 | 7 |
-| 619209 Others | 0.791 | 0.944 | 0.680 | 25 |
-| 132098 IC Clearing account - Paid on Behalf | 0.800 | 0.870 | 0.741 | 27 |
-| 134002 Prepaid Insurance | 0.800 | 1.000 | 0.667 | 6 |
-| 612001 Paid Social | 0.875 | 0.933 | 0.824 | 17 |
-| 614306 Other Employee Expenses | 0.875 | 1.000 | 0.778 | 9 |
-| 619207 Utilities | 0.880 | 0.846 | 0.917 | 12 |
-| 619201 Equipment Expense | 0.885 | 0.885 | 0.885 | 26 |
+| Train Size | Train Accuracy | Validation Accuracy |
+| --- | ---: | ---: |
+| 790 | 0.9848 | 0.5895 |
+| 1580 | 0.9859 | 0.7170 |
+| 2371 | 0.9850 | 0.7930 |
+| 3161 | 0.9850 | 0.8474 |
+| 3952 | 0.9866 | 0.8773 |
 
-## Discussion
+## Validation Curve
 
-- The dominant signal is transaction text. Vendor ID is useful when the same supplier consistently maps to one account.
-- Grouped validation is lower than shuffled validation, which is expected because it removes repeated `itemName` leakage.
-- Rare labels remain the main weakness. Many classes have too little support for stable estimates, so macro F1 is the better caution metric than overall accuracy alone.
+| C | Train Accuracy | Validation Accuracy |
+| --- | ---: | ---: |
+| 0.25 | 0.9698 | 0.8657 |
+| 0.5 | 0.9807 | 0.8715 |
+| 1.0 | 0.9866 | 0.8773 |
+| 2.0 | 0.9888 | 0.8783 |
+| 4.0 | 0.9907 | 0.8794 |
+
+## Conclusion
+
+- No underfitting signal: both train and validation scores are high, and validation improves as more data is added.
+- Moderate overfitting signal: train accuracy stays around 0.99 while grouped validation remains lower by about 0.10.
+- The primary reported metric should stay the grouped natural-distribution score. The balanced benchmark should be reported alongside it, not instead of it.

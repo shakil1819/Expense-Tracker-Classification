@@ -5,7 +5,10 @@
     "unique_account_names": 103,
     "labels_lt_10": 43,
     "labels_lt_5": 34,
+    "labels_lt_3": 21,
     "singleton_labels": 16,
+    "labels_with_one_unique_item": 18,
+    "labels_with_lt_3_unique_items": 25,
     "missing_item_descriptions": 31,
     "min_amount": -15195.0,
     "max_amount": 161838000.0,
@@ -53,32 +56,14 @@
     ]
   },
   "baseline": {
-    "item_vendor_lookup_accuracy": 0.7425944841675178
-  },
-  "repeated": {
-    "random": {
-      "strategy": "random",
-      "n_splits": 5,
-      "test_size": 0.2,
-      "accuracy_mean": 0.9074565883554648,
-      "accuracy_std": 0.006670001110240861,
-      "weighted_f1_mean": 0.9043116459652276,
-      "macro_f1_mean": 0.7867560557199929
-    },
-    "group_item": {
-      "strategy": "group_item",
-      "n_splits": 5,
-      "test_size": 0.2,
-      "accuracy_mean": 0.8771383489465663,
-      "accuracy_std": 0.014963867060810942,
-      "weighted_f1_mean": 0.871210536042493,
-      "macro_f1_mean": 0.7339368245817155
-    }
+    "item_vendor_lookup_accuracy": 0.7385086823289071
   },
   "holdout": {
     "random": {
       "strategy": "random",
+      "train_accuracy": 0.9895274584929757,
       "accuracy": 0.9050051072522982,
+      "accuracy_gap": 0.08452235124067753,
       "weighted_f1": 0.9018823084205758,
       "macro_f1": 0.7733241779173791,
       "train_size": 3915,
@@ -231,7 +216,9 @@
     },
     "group_item": {
       "strategy": "group_item",
+      "train_accuracy": 0.9881072874493927,
       "accuracy": 0.89171974522293,
+      "accuracy_gap": 0.09638754222646273,
       "weighted_f1": 0.8832282192351786,
       "macro_f1": 0.779665580704541,
       "train_size": 3952,
@@ -381,6 +368,150 @@
           "support": 9
         }
       ]
+    }
+  },
+  "repeated": {
+    "random": {
+      "strategy": "random",
+      "n_splits": 5,
+      "test_size": 0.2,
+      "train_accuracy_mean": 0.989272030651341,
+      "accuracy_mean": 0.9074565883554648,
+      "accuracy_std": 0.006670001110240861,
+      "accuracy_gap_mean": 0.08181544229587612,
+      "weighted_f1_mean": 0.9043116459652276,
+      "macro_f1_mean": 0.7867560557199929
+    },
+    "group_item": {
+      "strategy": "group_item",
+      "n_splits": 5,
+      "test_size": 0.2,
+      "train_accuracy_mean": 0.9887362226897427,
+      "accuracy_mean": 0.8771383489465663,
+      "accuracy_std": 0.014963867060810942,
+      "accuracy_gap_mean": 0.11159787374317642,
+      "weighted_f1_mean": 0.871210536042493,
+      "macro_f1_mean": 0.7339368245817155
+    }
+  },
+  "balanced_holdout": {
+    "strategy": "balanced_unseen",
+    "eligible_labels": 64,
+    "train_size": 4678,
+    "test_size": 192,
+    "samples_per_class": 3,
+    "min_train_size": 5,
+    "train_accuracy": 0.9886703719538265,
+    "accuracy": 0.8385416666666666,
+    "accuracy_gap": 0.15012870528715982,
+    "weighted_f1": 0.8285905067155066,
+    "macro_f1": 0.8034817034817033,
+    "class_weight": null,
+    "class_balance_check": {
+      "min_test_support": 3,
+      "max_test_support": 3
+    }
+  },
+  "balanced_repeated": {
+    "strategy": "balanced_unseen",
+    "repeats": 5,
+    "samples_per_class": 3,
+    "min_train_size": 5,
+    "eligible_labels_mean": 64.0,
+    "default_model": {
+      "accuracy_mean": 0.8354166666666668,
+      "accuracy_std": 0.02046550281707135,
+      "macro_f1_mean": 0.8072061134771381,
+      "weighted_f1_mean": 0.8218046189921189,
+      "accuracy_gap_mean": 0.1534458786933331
+    },
+    "class_weight_balanced_model": {
+      "accuracy_mean": 0.853125,
+      "accuracy_std": 0.019598841377319553,
+      "macro_f1_mean": 0.8103076891847344,
+      "weighted_f1_mean": 0.840298971861472,
+      "accuracy_gap_mean": 0.12310764243312604
+    }
+  },
+  "diagnostics": {
+    "fit_assessment": {
+      "underfitting": false,
+      "overfitting": true,
+      "summary": "The model is not underfitting because training accuracy is near 0.99 and validation accuracy remains strong. There is moderate overfitting because train accuracy exceeds grouped test accuracy by roughly 0.10 to 0.11."
+    },
+    "train_test_gap": {
+      "random_holdout_train_accuracy": 0.9895274584929757,
+      "random_holdout_test_accuracy": 0.9050051072522982,
+      "random_holdout_gap": 0.08452235124067753,
+      "group_holdout_train_accuracy": 0.9881072874493927,
+      "group_holdout_test_accuracy": 0.89171974522293,
+      "group_holdout_gap": 0.09638754222646273
+    },
+    "learning_curve": [
+      {
+        "train_size": 790,
+        "train_accuracy": 0.9848101265822785,
+        "validation_accuracy": 0.589525889296282
+      },
+      {
+        "train_size": 1580,
+        "train_accuracy": 0.9858649789029537,
+        "validation_accuracy": 0.7169709430820251
+      },
+      {
+        "train_size": 2371,
+        "train_accuracy": 0.9849571207647969,
+        "validation_accuracy": 0.7930272182308987
+      },
+      {
+        "train_size": 3161,
+        "train_accuracy": 0.9850258357060002,
+        "validation_accuracy": 0.8473748521835097
+      },
+      {
+        "train_size": 3952,
+        "train_accuracy": 0.9865842673847186,
+        "validation_accuracy": 0.8773398772386631
+      }
+    ],
+    "validation_curve": [
+      {
+        "C": 0.25,
+        "train_accuracy": 0.9697731381099661,
+        "validation_accuracy": 0.8656742894991963
+      },
+      {
+        "C": 0.5,
+        "train_accuracy": 0.9807253946067204,
+        "validation_accuracy": 0.8715153968106217
+      },
+      {
+        "C": 1.0,
+        "train_accuracy": 0.9865842673847186,
+        "validation_accuracy": 0.8773398772386631
+      },
+      {
+        "C": 2.0,
+        "train_accuracy": 0.9887944481326513,
+        "validation_accuracy": 0.8783452679135691
+      },
+      {
+        "C": 4.0,
+        "train_accuracy": 0.9906604593023959,
+        "validation_accuracy": 0.8794349292640143
+      }
+    ],
+    "split_strategy_review": {
+      "random_split_issue": "Random row-level splits are optimistic because duplicate or near-duplicate item names can appear in both train and test.",
+      "group_split_rationale": "Grouping by normalized itemName is a practical guardrail because it holds out repeated transaction text patterns.",
+      "group_split_tradeoff": "GroupShuffleSplit does not preserve class ratios, so minority-class estimates can still be noisy.",
+      "stratified_group_feasibility": {
+        "labels_lt_3_samples": 21,
+        "singleton_labels": 16,
+        "warning": "Some classes have fewer than 3 samples, so full-dataset StratifiedGroupKFold is not fully feasible.",
+        "stratified_group_kfold_accuracy_mean": 0.8765796974055052,
+        "stratified_group_kfold_accuracy_std": 0.012349111447559971
+      }
     }
   }
 }
