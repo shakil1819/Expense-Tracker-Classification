@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import math
+import random
 import re
+from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -154,6 +156,28 @@ def summarize_records(records: list[ExpenseRecord]) -> dict[str, object]:
             [str(label), int(count)] for label, count in label_counts.head(10).items()
         ],
     }
+
+
+def resample_minority_classes(
+    records: list[ExpenseRecord],
+    min_count: int = 10,
+    random_state: int = 42,
+) -> list[ExpenseRecord]:
+    """Oversample minority classes by duplicating records until each class reaches min_count.
+
+    Must only be called on training data — never on validation or test records.
+    Sampling is with replacement from existing records in each class.
+    """
+    rng = random.Random(random_state)
+    by_label: dict[str, list[ExpenseRecord]] = defaultdict(list)
+    for record in records:
+        by_label[record.account_name].append(record)
+    result: list[ExpenseRecord] = list(records)
+    for label_records in by_label.values():
+        deficit = min_count - len(label_records)
+        if deficit > 0:
+            result.extend(rng.choices(label_records, k=deficit))
+    return result
 
 
 def build_feature_union() -> FeatureUnion:

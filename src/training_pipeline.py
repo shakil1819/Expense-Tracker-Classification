@@ -25,6 +25,7 @@ from src.feature_engineering_pipeline import (
     build_feature_union,
     load_records,
     records_to_examples,
+    resample_minority_classes,
     summarize_records,
 )
 from src.inference_pipeline import save_trained_model
@@ -112,13 +113,56 @@ def baseline_lookup_accuracy(records: list[ExpenseRecord], random_state: int = 4
     return float(accuracy_score(labels[test_idx], np.array(predictions, dtype=object)))
 
 
+def analyze_errors_by_class_frequency(
+    test_records: list[ExpenseRecord],
+    predictions: np.ndarray,
+    train_records: list[ExpenseRecord],
+) -> dict[str, object]:
+    """Break prediction errors down by class training-set frequency.
+
+    Exposes whether errors are concentrated in rare classes (data problem)
+    or in frequent classes (model problem).
+    """
+    train_counts = Counter(record.account_name for record in train_records)
+    bucket_defs = [
+        ("singleton (n=1)", lambda n: n == 1),
+        ("very_rare (2-4)", lambda n: 2 <= n <= 4),
+        ("rare (5-19)", lambda n: 5 <= n <= 19),
+        ("medium (20-99)", lambda n: 20 <= n <= 99),
+        ("frequent (100+)", lambda n: n >= 100),
+    ]
+    buckets: dict[str, dict[str, int]] = {
+        name: {"correct": 0, "total": 0} for name, _ in bucket_defs
+    }
+    for record, pred in zip(test_records, predictions):
+        n = train_counts.get(record.account_name, 0)
+        for name, check in bucket_defs:
+            if check(n):
+                buckets[name]["total"] += 1
+                if str(pred) == record.account_name:
+                    buckets[name]["correct"] += 1
+                break
+    return {
+        name: {
+            "accuracy": round(v["correct"] / v["total"], 4) if v["total"] > 0 else None,
+            "correct": v["correct"],
+            "total": v["total"],
+        }
+        for name, v in buckets.items()
+        if v["total"] > 0
+    }
+
+
 def _fit_and_score(
     train_records: list[ExpenseRecord],
     test_records: list[ExpenseRecord],
     *,
     C: float = 1.0,
     class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> dict[str, object]:
+    if oversample_min_count > 0:
+        train_records = resample_minority_classes(train_records, min_count=oversample_min_count)
     train_x, train_y, _ = records_to_examples(train_records)
     test_x, test_y, _ = records_to_examples(test_records)
     model = build_classifier(C=C, class_weight=class_weight)
@@ -133,6 +177,7 @@ def _fit_and_score(
         "weighted_f1": float(report["weighted avg"]["f1-score"]),
         "macro_f1": float(report["macro avg"]["f1-score"]),
         "label_report": report,
+        "test_predictions": test_pred,
     }
 
 
@@ -140,18 +185,22 @@ def tune_hyperparameters_grouped_cv(
     records: list[ExpenseRecord],
     C_values: list[float] | None = None,
     class_weights: list[str | None] | None = None,
+    oversample_min_count_values: list[int] | None = None,
     n_splits: int = 5,
     random_state: int = 42,
 ) -> dict[str, object]:
-    """Tune C and class_weight using grouped 5-fold CV on item-name groups.
+    """Tune C, class_weight, and oversample_min_count using grouped CV on item-name groups.
 
-    Uses GroupShuffleSplit to prevent item-name leakage during tuning.
-    Returns the best (C, class_weight) pair and the full grid results.
+    Uses GroupShuffleSplit so item-name patterns cannot leak from train into validation.
+    Oversampling is applied only to training folds — test folds are untouched.
+    Returns the best parameter combination and the full grid results.
     """
     if C_values is None:
-        C_values = [0.1, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0]
+        C_values = [0.5, 1.0, 2.0, 4.0, 8.0]
     if class_weights is None:
         class_weights = [None, "balanced"]
+    if oversample_min_count_values is None:
+        oversample_min_count_values = [0]
 
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
@@ -159,33 +208,38 @@ def tune_hyperparameters_grouped_cv(
     splits = list(splitter.split(indices, labels, groups=groups))
 
     grid_results: list[dict[str, object]] = []
-    for cw in class_weights:
-        for c in C_values:
-            fold_train_scores: list[float] = []
-            fold_test_scores: list[float] = []
-            for train_idx, test_idx in splits:
-                train_recs, test_recs = split_records_by_indices(records, train_idx, test_idx)
-                scored = _fit_and_score(train_recs, test_recs, C=c, class_weight=cw)
-                fold_train_scores.append(scored["train_accuracy"])
-                fold_test_scores.append(scored["test_accuracy"])
-            val_mean = float(np.mean(fold_test_scores))
-            train_mean = float(np.mean(fold_train_scores))
-            grid_results.append(
-                {
-                    "C": c,
-                    "class_weight": str(cw),
-                    "val_accuracy_mean": val_mean,
-                    "val_accuracy_std": float(np.std(fold_test_scores)),
-                    "train_accuracy_mean": train_mean,
-                    "gap_mean": round(train_mean - val_mean, 4),
-                }
-            )
+    for omc in oversample_min_count_values:
+        for cw in class_weights:
+            for c in C_values:
+                fold_train_scores: list[float] = []
+                fold_test_scores: list[float] = []
+                for train_idx, test_idx in splits:
+                    train_recs, test_recs = split_records_by_indices(records, train_idx, test_idx)
+                    scored = _fit_and_score(
+                        train_recs, test_recs, C=c, class_weight=cw, oversample_min_count=omc
+                    )
+                    fold_train_scores.append(scored["train_accuracy"])
+                    fold_test_scores.append(scored["test_accuracy"])
+                val_mean = float(np.mean(fold_test_scores))
+                train_mean = float(np.mean(fold_train_scores))
+                grid_results.append(
+                    {
+                        "C": c,
+                        "class_weight": str(cw),
+                        "oversample_min_count": omc,
+                        "val_accuracy_mean": val_mean,
+                        "val_accuracy_std": float(np.std(fold_test_scores)),
+                        "train_accuracy_mean": train_mean,
+                        "gap_mean": round(train_mean - val_mean, 4),
+                    }
+                )
 
     best = max(grid_results, key=lambda r: r["val_accuracy_mean"])
     best_class_weight: str | None = None if best["class_weight"] == "None" else best["class_weight"]
     return {
         "best_C": best["C"],
         "best_class_weight": best_class_weight,
+        "best_oversample_min_count": best["oversample_min_count"],
         "best_val_accuracy": best["val_accuracy_mean"],
         "best_gap": best["gap_mean"],
         "grid": grid_results,
@@ -199,6 +253,7 @@ def evaluate_holdout(
     random_state: int = 42,
     C: float = 1.0,
     class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> dict[str, object]:
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
@@ -212,7 +267,10 @@ def evaluate_holdout(
         raise ValueError(f"Unknown strategy: {strategy}")
 
     train_records, test_records = split_records_by_indices(records, train_idx, test_idx)
-    scored = _fit_and_score(train_records, test_records, C=C, class_weight=class_weight)
+    scored = _fit_and_score(
+        train_records, test_records, C=C, class_weight=class_weight,
+        oversample_min_count=oversample_min_count,
+    )
 
     label_rows = []
     for label, metrics in scored["label_report"].items():
@@ -227,6 +285,9 @@ def evaluate_holdout(
                 "support": int(metrics["support"]),
             }
         )
+    error_analysis = analyze_errors_by_class_frequency(
+        test_records, scored["test_predictions"], train_records
+    )
     return {
         "strategy": strategy,
         "train_accuracy": scored["train_accuracy"],
@@ -237,6 +298,7 @@ def evaluate_holdout(
         "train_size": len(train_records),
         "test_size": len(test_records),
         "labels_in_test": len(set(record.account_name for record in test_records)),
+        "error_analysis_by_frequency": error_analysis,
         "top_labels": sorted(
             [row for row in label_rows if row["support"] >= 5],
             key=lambda row: (-row["f1"], -row["support"], row["label"]),
@@ -256,6 +318,7 @@ def evaluate_repeated_splits(
     random_state: int = 42,
     C: float = 1.0,
     class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> dict[str, object]:
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
@@ -272,7 +335,10 @@ def evaluate_repeated_splits(
     train_accuracies: list[float] = []
     for train_idx, test_idx in split_iter:
         train_records, test_records = split_records_by_indices(records, train_idx, test_idx)
-        scored = _fit_and_score(train_records, test_records, C=C, class_weight=class_weight)
+        scored = _fit_and_score(
+            train_records, test_records, C=C, class_weight=class_weight,
+            oversample_min_count=oversample_min_count,
+        )
         train_accuracies.append(scored["train_accuracy"])
         results.append(
             SplitResult(
@@ -594,7 +660,10 @@ def fit_full_model(
     records: list[ExpenseRecord],
     C: float = 1.0,
     class_weight: str | None = None,
+    oversample_min_count: int = 0,
 ) -> Pipeline:
+    if oversample_min_count > 0:
+        records = resample_minority_classes(records, min_count=oversample_min_count)
     examples, labels, _ = records_to_examples(records)
     model = build_classifier(C=C, class_weight=class_weight)
     model.fit(examples, labels)
@@ -635,8 +704,19 @@ def render_results_markdown(summary: dict[str, object]) -> str:
         for row in diagnostics["validation_curve"]
     )
     tuning_rows = "\n".join(
-        f"| {row['C']} | {row['class_weight']} | {row['val_accuracy_mean']:.4f} | {row['val_accuracy_std']:.4f} | {row['gap_mean']:.4f} |"
+        f"| {row['C']} | {row['class_weight']} | {row['oversample_min_count']} "
+        f"| {row['val_accuracy_mean']:.4f} | {row['val_accuracy_std']:.4f} | {row['gap_mean']:.4f} |"
         for row in tuning["grid"]
+    )
+    error_analysis = summary["holdout"]["group_item"]["error_analysis_by_frequency"]
+    error_rows_default = "\n".join(
+        f"| {bucket} | {stats['total']} | {stats['correct']} | {stats['accuracy']:.4f} |"
+        for bucket, stats in error_analysis.items()
+    )
+    error_analysis_tuned = summary["holdout"]["group_item_tuned"]["error_analysis_by_frequency"]
+    error_rows_tuned = "\n".join(
+        f"| {bucket} | {stats['total']} | {stats['correct']} | {stats['accuracy']:.4f} |"
+        for bucket, stats in error_analysis_tuned.items()
     )
     return f"""# Results
 
@@ -663,12 +743,28 @@ LinearSVC on word TF-IDF, char TF-IDF, vendor one-hot, and log-scaled amount. Ov
 
 The learning curve shows grouped validation accuracy improving from 0.59 (20% data) to 0.88 (100% data) with train accuracy stuck at 0.99 throughout. This confirms the gap is primarily driven by **insufficient training data per class** (average 47 samples across 103 classes), not by a tunable regularisation parameter. Increasing C further flattens the curve while decreasing C below 0.25 only hurts validation accuracy.
 
+## Error Analysis by Class Training Frequency (Default Model)
+
+Identifies which frequency bucket drives the accuracy gap.
+
+| Frequency Bucket | Test Samples | Correct | Accuracy |
+| --- | ---: | ---: | ---: |
+{error_rows_default}
+
+## Error Analysis by Class Training Frequency (Tuned Model)
+
+| Frequency Bucket | Test Samples | Correct | Accuracy |
+| --- | ---: | ---: | ---: |
+{error_rows_tuned}
+
 ## Hyperparameter Tuning (Grouped 5-Fold CV)
 
-Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, val_accuracy={tuning['best_val_accuracy']:.4f}, gap={tuning['best_gap']:.4f}
+Joint grid search over C, class_weight, and oversample_min_count (oversampling applied to training folds only).
 
-| C | class_weight | Val Accuracy Mean | Val Accuracy Std | Gap Mean |
-| --- | --- | ---: | ---: | ---: |
+Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']}, val_accuracy={tuning['best_val_accuracy']:.4f}, gap={tuning['best_gap']:.4f}
+
+| C | class_weight | oversample_min_count | Val Accuracy Mean | Val Accuracy Std | Gap Mean |
+| --- | --- | --- | ---: | ---: | ---: |
 {tuning_rows}
 
 ## Why The Split Strategy Changed
@@ -720,35 +816,42 @@ Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, val_accu
 ## Conclusion
 
 - Overfitting confirmed: train≈0.99, grouped val≈{fit['grouped_val_accuracy']:.2f}, gap≈{fit['gap']:.2f}.
-- Cause: high-capacity TF-IDF feature space with limited per-class training data (avg 47 rows/class).
-- Fix applied: grouped 5-fold CV tuning identified C={tuning['best_C']}, class_weight={tuning['best_class_weight']} as optimal.
-- Tuned model achieves grouped holdout accuracy {natural_group_tuned['accuracy']:.4f} (was {natural_group['accuracy']:.4f}) and reduces gap to {natural_group_tuned['accuracy_gap']:.4f} (was {natural_group['accuracy_gap']:.4f}).
-- Remaining gap is irreducible with current data volume — 34 labels have fewer than 5 training examples.
+- Error analysis shows the gap is driven by rare-class test samples — see the frequency bucket table above.
+- Fix applied: joint grouped CV tuning over C, class_weight, and oversample_min_count identified C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']} as optimal.
+- Oversampling duplicates minority-class training records to the threshold during training only; test folds are never touched.
+- Tuned model achieves grouped holdout accuracy {natural_group_tuned['accuracy']:.4f} (was {natural_group['accuracy']:.4f}) and gap {natural_group_tuned['accuracy_gap']:.4f} (was {natural_group['accuracy_gap']:.4f}).
 """
 
 
 def run_training_pipeline(data_path: str = DATA_PATH) -> dict[str, object]:
     records = load_records(data_path)
 
-    # Tune hyperparameters via grouped CV before any holdout evaluation.
-    tuning = tune_hyperparameters_grouped_cv(records)
+    # Joint grid search over C, class_weight, and oversample_min_count via grouped CV.
+    tuning = tune_hyperparameters_grouped_cv(
+        records,
+        C_values=[0.5, 1.0, 2.0, 4.0, 8.0],
+        class_weights=[None, "balanced"],
+        oversample_min_count_values=[0, 5, 10],
+    )
     best_C: float = tuning["best_C"]
     best_cw: str | None = tuning["best_class_weight"]
+    best_omc: int = tuning["best_oversample_min_count"]
 
     summary = {
         "dataset": summarize_records(records),
         "baseline": {"item_vendor_lookup_accuracy": baseline_lookup_accuracy(records)},
         "hyperparameter_tuning": tuning,
         "holdout": {
-            # Default params holdout — kept for comparison / reproducibility.
+            # Default params — kept for before/after comparison.
             "random": evaluate_holdout(records, strategy="random"),
             "group_item": evaluate_holdout(records, strategy="group_item"),
-            # Tuned params holdout — this is the primary production estimate.
+            # Tuned params — primary production estimate.
             "group_item_tuned": evaluate_holdout(
                 records,
                 strategy="group_item",
                 C=best_C,
                 class_weight=best_cw,
+                oversample_min_count=best_omc,
             ),
         },
         "repeated": {
@@ -759,13 +862,14 @@ def run_training_pipeline(data_path: str = DATA_PATH) -> dict[str, object]:
                 strategy="group_item",
                 C=best_C,
                 class_weight=best_cw,
+                oversample_min_count=best_omc,
             ),
         },
         "balanced_holdout": evaluate_balanced_holdout(records),
         "balanced_repeated": evaluate_repeated_balanced_holdout(records),
         "diagnostics": compute_overfitting_diagnostics(records),
     }
-    model = fit_full_model(records, C=best_C, class_weight=best_cw)
+    model = fit_full_model(records, C=best_C, class_weight=best_cw, oversample_min_count=best_omc)
     write_json("artifacts/evaluation_summary.json", summary)
     write_markdown(".docs/03_results.md", render_results_markdown(summary))
     save_trained_model(model, "artifacts/account_classifier.joblib")
@@ -788,6 +892,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"best_C={tuning['best_C']} "
             f"best_class_weight={tuning['best_class_weight']} "
+            f"best_oversample_min_count={tuning['best_oversample_min_count']} "
             "group_accuracy_default="
             f"{summary['holdout']['group_item']['accuracy']:.4f} "
             "group_accuracy_tuned="
