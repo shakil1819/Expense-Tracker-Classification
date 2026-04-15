@@ -52,7 +52,7 @@ class SplitResult:
 def build_classifier(
     C: float = 1.0,
     class_weight: str | None = None,
-    max_iter: int = 5000,
+    max_iter: int = 20000,
 ) -> Pipeline:
     return Pipeline(
         [

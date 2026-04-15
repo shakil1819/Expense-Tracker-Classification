@@ -5,7 +5,8 @@ Python solution for the Peakflo take-home task. The code now lives under `src/` 
 ## Run
 
 ```powershell
-python -m uv run python main.py run
+. .\.venv\Scripts\Activate.ps1
+uv run main.py
 ```
 
 This writes:
@@ -17,11 +18,12 @@ This writes:
 ## Test
 
 ```powershell
-python -m uv run pytest
+. .\.venv\Scripts\Activate.ps1
+python -m pytest
 ```
 
 ## Notes
 
-- The implementation avoids `pandas` because compiled `pandas` wheels are blocked in this environment.
+- The dataset loading and summary path now uses `pandas`.
 - The primary evaluation uses grouped holdouts by normalized `itemName` to reduce duplicate-text leakage.
 - The report now includes both natural-distribution metrics and a balanced unseen benchmark.

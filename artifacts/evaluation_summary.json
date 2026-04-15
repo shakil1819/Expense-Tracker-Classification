@@ -56,7 +56,143 @@
     ]
   },
   "baseline": {
-    "item_vendor_lookup_accuracy": 0.7385086823289071
+    "item_vendor_lookup_accuracy": 0.745658835546476
+  },
+  "hyperparameter_tuning": {
+    "best_C": 4.0,
+    "best_class_weight": null,
+    "best_val_accuracy": 0.8809676843118492,
+    "best_gap": 0.1116,
+    "grid": [
+      {
+        "C": 0.1,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8508334523550094,
+        "val_accuracy_std": 0.018095647408672207,
+        "train_accuracy_mean": 0.9522333765158478,
+        "gap_mean": 0.1014
+      },
+      {
+        "C": 0.25,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8658763586445769,
+        "val_accuracy_std": 0.017836766351669763,
+        "train_accuracy_mean": 0.9748638861532978,
+        "gap_mean": 0.109
+      },
+      {
+        "C": 0.5,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8757229875337117,
+        "val_accuracy_std": 0.017445141973076738,
+        "train_accuracy_mean": 0.9845009098634743,
+        "gap_mean": 0.1088
+      },
+      {
+        "C": 1.0,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8771383489465663,
+        "val_accuracy_std": 0.014963867060810942,
+        "train_accuracy_mean": 0.9887362226897427,
+        "gap_mean": 0.1116
+      },
+      {
+        "C": 2.0,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8784212484687733,
+        "val_accuracy_std": 0.014921416034414514,
+        "train_accuracy_mean": 0.990929811226789,
+        "gap_mean": 0.1125
+      },
+      {
+        "C": 4.0,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8809676843118492,
+        "val_accuracy_std": 0.017593562859816413,
+        "train_accuracy_mean": 0.9926089615593334,
+        "gap_mean": 0.1116
+      },
+      {
+        "C": 8.0,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8799773255281019,
+        "val_accuracy_std": 0.016126437916046715,
+        "train_accuracy_mean": 0.9935264114320184,
+        "gap_mean": 0.1135
+      },
+      {
+        "C": 16.0,
+        "class_weight": "None",
+        "val_accuracy_mean": 0.8762019593689396,
+        "val_accuracy_std": 0.013645311691485706,
+        "train_accuracy_mean": 0.994242488263372,
+        "gap_mean": 0.118
+      },
+      {
+        "C": 0.1,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8288578349378009,
+        "val_accuracy_std": 0.020539892153895158,
+        "train_accuracy_mean": 0.9211741797374101,
+        "gap_mean": 0.0923
+      },
+      {
+        "C": 0.25,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8558712790711291,
+        "val_accuracy_std": 0.020402949284622666,
+        "train_accuracy_mean": 0.9552371428106312,
+        "gap_mean": 0.0994
+      },
+      {
+        "C": 0.5,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8670972378465912,
+        "val_accuracy_std": 0.017794782637632497,
+        "train_accuracy_mean": 0.9678876351544966,
+        "gap_mean": 0.1008
+      },
+      {
+        "C": 1.0,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8719063335054521,
+        "val_accuracy_std": 0.01836123348778229,
+        "train_accuracy_mean": 0.9772108947771734,
+        "gap_mean": 0.1053
+      },
+      {
+        "C": 2.0,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8739430620528259,
+        "val_accuracy_std": 0.01464116203814213,
+        "train_accuracy_mean": 0.9830804266143082,
+        "gap_mean": 0.1091
+      },
+      {
+        "C": 4.0,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8768208013363574,
+        "val_accuracy_std": 0.014849495213964765,
+        "train_accuracy_mean": 0.9860847551803674,
+        "gap_mean": 0.1093
+      },
+      {
+        "C": 8.0,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8792851015710312,
+        "val_accuracy_std": 0.017004560539156888,
+        "train_accuracy_mean": 0.9896537209463343,
+        "gap_mean": 0.1104
+      },
+      {
+        "C": 16.0,
+        "class_weight": "balanced",
+        "val_accuracy_mean": 0.8796906834561247,
+        "val_accuracy_std": 0.015985742924054785,
+        "train_accuracy_mean": 0.992303110508361,
+        "gap_mean": 0.1126
+      }
+    ]
   },
   "holdout": {
     "random": {
@@ -368,6 +504,161 @@
           "support": 9
         }
       ]
+    },
+    "group_item_tuned": {
+      "strategy": "group_item",
+      "train_accuracy": 0.9924089068825911,
+      "accuracy": 0.9012738853503185,
+      "accuracy_gap": 0.0911350215322726,
+      "weighted_f1": 0.8975667104275864,
+      "macro_f1": 0.7890801772908053,
+      "train_size": 3952,
+      "test_size": 942,
+      "labels_in_test": 71,
+      "top_labels": [
+        {
+          "label": "617103 Subcontractors/Outsource",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 40
+        },
+        {
+          "label": "511301 Display COGS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 12
+        },
+        {
+          "label": "612005 Giveaway",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 12
+        },
+        {
+          "label": "619206 Telephone & Internet",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 9
+        },
+        {
+          "label": "511102 External Commission",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "611103 Cloud server - Google",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "619518 Courier and postage",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 8
+        },
+        {
+          "label": "617101 Customer Support - Others",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 6
+        },
+        {
+          "label": "131020 Unbilled receivables",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        },
+        {
+          "label": "611101 Cloud server - AWS",
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1": 1.0,
+          "support": 5
+        }
+      ],
+      "bottom_labels": [
+        {
+          "label": "619515 Engagement",
+          "precision": 0.7777777777777778,
+          "recall": 0.5833333333333334,
+          "f1": 0.6666666666666666,
+          "support": 12
+        },
+        {
+          "label": "142101 Office Equipment - Cost",
+          "precision": 0.8,
+          "recall": 0.6666666666666666,
+          "f1": 0.7272727272727273,
+          "support": 6
+        },
+        {
+          "label": "617202 Legal Expenses",
+          "precision": 0.7777777777777778,
+          "recall": 0.7,
+          "f1": 0.7368421052631579,
+          "support": 10
+        },
+        {
+          "label": "134001 Prepaid Operating Expense",
+          "precision": 0.7317073170731707,
+          "recall": 0.7692307692307693,
+          "f1": 0.75,
+          "support": 39
+        },
+        {
+          "label": "612002 Paid Search",
+          "precision": 0.6666666666666666,
+          "recall": 0.8888888888888888,
+          "f1": 0.7619047619047619,
+          "support": 9
+        },
+        {
+          "label": "614306 Other Employee Expenses",
+          "precision": 0.7142857142857143,
+          "recall": 0.8333333333333334,
+          "f1": 0.7692307692307693,
+          "support": 6
+        },
+        {
+          "label": "132098 IC Clearing account - Paid on Behalf",
+          "precision": 0.8461538461538461,
+          "recall": 0.7096774193548387,
+          "f1": 0.7719298245614035,
+          "support": 31
+        },
+        {
+          "label": "617203 Tax Fee",
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 6
+        },
+        {
+          "label": "619210 Subscription",
+          "precision": 1.0,
+          "recall": 0.6666666666666666,
+          "f1": 0.8,
+          "support": 6
+        },
+        {
+          "label": "612013 Others",
+          "precision": 1.0,
+          "recall": 0.7142857142857143,
+          "f1": 0.8333333333333334,
+          "support": 7
+        }
+      ]
     }
   },
   "repeated": {
@@ -392,6 +683,17 @@
       "accuracy_gap_mean": 0.11159787374317642,
       "weighted_f1_mean": 0.871210536042493,
       "macro_f1_mean": 0.7339368245817155
+    },
+    "group_item_tuned": {
+      "strategy": "group_item",
+      "n_splits": 5,
+      "test_size": 0.2,
+      "train_accuracy_mean": 0.9926089615593334,
+      "accuracy_mean": 0.8809676843118492,
+      "accuracy_std": 0.017593562859816413,
+      "accuracy_gap_mean": 0.11164127724748418,
+      "weighted_f1_mean": 0.876044407932041,
+      "macro_f1_mean": 0.7373019772637697
     }
   },
   "balanced_holdout": {
@@ -437,7 +739,10 @@
     "fit_assessment": {
       "underfitting": false,
       "overfitting": true,
-      "summary": "The model is not underfitting because training accuracy is near 0.99 and validation accuracy remains strong. There is moderate overfitting because train accuracy exceeds grouped test accuracy by roughly 0.10 to 0.11."
+      "train_accuracy": 0.9881072874493927,
+      "grouped_val_accuracy": 0.89171974522293,
+      "gap": 0.09638754222646273,
+      "summary": "Train accuracy 0.988, grouped val accuracy 0.892, gap 0.096. No underfitting. Moderate overfitting \u2014 gap 0.096 exceeds 0.05 threshold. Cause: LinearSVC with high-dimensional TF-IDF memorises training phrase patterns. Fix: tune C via grouped CV to find optimal bias-variance trade-off."
     },
     "train_test_gap": {
       "random_holdout_train_accuracy": 0.9895274584929757,
@@ -476,6 +781,11 @@
     ],
     "validation_curve": [
       {
+        "C": 0.1,
+        "train_accuracy": 0.9485580688310984,
+        "validation_accuracy": 0.8464204784173739
+      },
+      {
         "C": 0.25,
         "train_accuracy": 0.9697731381099661,
         "validation_accuracy": 0.8656742894991963
@@ -499,6 +809,16 @@
         "C": 4.0,
         "train_accuracy": 0.9906604593023959,
         "validation_accuracy": 0.8794349292640143
+      },
+      {
+        "C": 8.0,
+        "train_accuracy": 0.9918486611305061,
+        "validation_accuracy": 0.8760480839377202
+      },
+      {
+        "C": 16.0,
+        "train_accuracy": 0.9926131946124936,
+        "validation_accuracy": 0.8685104987512625
       }
     ],
     "split_strategy_review": {

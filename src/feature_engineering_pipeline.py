@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import math
 import re
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -87,19 +86,26 @@ def build_text(item_name: object, item_description: object) -> str:
 
 
 def load_records(path: str | Path) -> list[ExpenseRecord]:
-    rows = json.loads(Path(path).read_text(encoding="utf-8"))
+    frame = pd.read_json(Path(path))
+    frame = frame.assign(
+        vendorId=frame["vendorId"].fillna("").astype(str),
+        itemName=frame["itemName"].fillna("").astype(str),
+        itemDescription=frame["itemDescription"].fillna("").astype(str),
+        accountName=frame["accountName"].astype(str),
+        itemTotalAmount=pd.to_numeric(frame["itemTotalAmount"], errors="coerce").fillna(0.0),
+    )
     records: list[ExpenseRecord] = []
-    for row in rows:
-        amount = float(row.get("itemTotalAmount") or 0.0)
-        item_name = row.get("itemName") or ""
-        item_description = row.get("itemDescription") or ""
+    for row in frame.itertuples(index=False):
+        amount = float(row.itemTotalAmount)
+        item_name = row.itemName
+        item_description = row.itemDescription
         normalized_item_name = normalize_text(item_name)
         records.append(
             ExpenseRecord(
-                vendor_id=str(row.get("vendorId") or ""),
+                vendor_id=str(row.vendorId),
                 item_name=str(item_name),
                 item_description=str(item_description),
-                account_name=str(row["accountName"]),
+                account_name=str(row.accountName),
                 item_total_amount=amount,
                 normalized_item_name=normalized_item_name,
                 text=build_text(item_name, item_description),
@@ -127,30 +133,26 @@ def records_to_examples(
 
 
 def summarize_records(records: list[ExpenseRecord]) -> dict[str, object]:
-    label_counts = Counter(record.account_name for record in records)
-    vendor_counts = Counter(record.vendor_id for record in records)
-    amounts = [record.item_total_amount for record in records]
-    unique_items_by_label: dict[str, set[str]] = {}
-    for record in records:
-        unique_items_by_label.setdefault(record.account_name, set()).add(record.normalized_item_name)
+    frame = pd.DataFrame.from_records(record.__dict__ for record in records)
+    label_counts = frame["account_name"].value_counts()
+    vendor_counts = frame["vendor_id"].value_counts()
+    unique_items_by_label = frame.groupby("account_name")["normalized_item_name"].nunique()
     return {
-        "record_count": len(records),
-        "unique_vendors": len(vendor_counts),
-        "unique_account_names": len(label_counts),
-        "labels_lt_10": sum(count < 10 for count in label_counts.values()),
-        "labels_lt_5": sum(count < 5 for count in label_counts.values()),
-        "labels_lt_3": sum(count < 3 for count in label_counts.values()),
-        "singleton_labels": sum(count == 1 for count in label_counts.values()),
-        "labels_with_one_unique_item": sum(
-            len(item_names) == 1 for item_names in unique_items_by_label.values()
-        ),
-        "labels_with_lt_3_unique_items": sum(
-            len(item_names) < 3 for item_names in unique_items_by_label.values()
-        ),
-        "missing_item_descriptions": sum(not record.item_description.strip() for record in records),
-        "min_amount": min(amounts),
-        "max_amount": max(amounts),
-        "top_accounts": label_counts.most_common(10),
+        "record_count": int(len(frame)),
+        "unique_vendors": int(vendor_counts.shape[0]),
+        "unique_account_names": int(label_counts.shape[0]),
+        "labels_lt_10": int((label_counts < 10).sum()),
+        "labels_lt_5": int((label_counts < 5).sum()),
+        "labels_lt_3": int((label_counts < 3).sum()),
+        "singleton_labels": int((label_counts == 1).sum()),
+        "labels_with_one_unique_item": int((unique_items_by_label == 1).sum()),
+        "labels_with_lt_3_unique_items": int((unique_items_by_label < 3).sum()),
+        "missing_item_descriptions": int(frame["item_description"].str.strip().eq("").sum()),
+        "min_amount": float(frame["item_total_amount"].min()),
+        "max_amount": float(frame["item_total_amount"].max()),
+        "top_accounts": [
+            [str(label), int(count)] for label, count in label_counts.head(10).items()
+        ],
     }
 
 
