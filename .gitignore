@@ -9,6 +9,13 @@ wheels/
 # Virtual environments
 .venv
 artifacts/*.joblib
+
+# Run data exports
+data/
+
+# Temporary scripts
+quick_eval*.py
+
 ##
 AGENTS.md
 CLAUDE.md

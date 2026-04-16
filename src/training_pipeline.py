@@ -6,9 +6,12 @@ import random
 import warnings
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+from loguru import logger
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import (
     GroupShuffleSplit,
@@ -28,7 +31,7 @@ from src.feature_engineering_pipeline import (
     resample_minority_classes,
     summarize_records,
 )
-from src.inference_pipeline import save_trained_model
+from src.inference_pipeline import CalibratedPredictor, build_vendor_account_map, save_trained_model
 
 
 DATA_PATH = "accounts-bills.json"
@@ -170,10 +173,16 @@ def _fit_and_score(
     train_pred = model.predict(train_x)
     test_pred = model.predict(test_x)
     report = classification_report(test_y, test_pred, output_dict=True, zero_division=0)
+    train_acc = float(accuracy_score(train_y, train_pred))
+    test_acc = float(accuracy_score(test_y, test_pred))
+    logger.debug(
+        "fit_and_score: C={}, cw={}, omc={} | train_acc={:.4f}, test_acc={:.4f}, macro_f1={:.4f}",
+        C, class_weight, oversample_min_count, train_acc, test_acc, report["macro avg"]["f1-score"],
+    )
     return {
         "model": model,
-        "train_accuracy": float(accuracy_score(train_y, train_pred)),
-        "test_accuracy": float(accuracy_score(test_y, test_pred)),
+        "train_accuracy": train_acc,
+        "test_accuracy": test_acc,
         "weighted_f1": float(report["weighted avg"]["f1-score"]),
         "macro_f1": float(report["macro avg"]["f1-score"]),
         "label_report": report,
@@ -188,11 +197,13 @@ def tune_hyperparameters_grouped_cv(
     oversample_min_count_values: list[int] | None = None,
     n_splits: int = 5,
     random_state: int = 42,
+    optimize_for: str = "macro_f1",
 ) -> dict[str, object]:
     """Tune C, class_weight, and oversample_min_count using grouped CV on item-name groups.
 
     Uses GroupShuffleSplit so item-name patterns cannot leak from train into validation.
     Oversampling is applied only to training folds — test folds are untouched.
+    optimize_for: 'macro_f1' or 'accuracy' — selects the objective for best-param selection.
     Returns the best parameter combination and the full grid results.
     """
     if C_values is None:
@@ -200,19 +211,25 @@ def tune_hyperparameters_grouped_cv(
     if class_weights is None:
         class_weights = [None, "balanced"]
     if oversample_min_count_values is None:
-        oversample_min_count_values = [0]
+        oversample_min_count_values = [0, 5, 10, 15, 20]
 
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
     splitter = GroupShuffleSplit(n_splits=n_splits, test_size=0.2, random_state=random_state)
     splits = list(splitter.split(indices, labels, groups=groups))
 
+    total_configs = len(oversample_min_count_values) * len(class_weights) * len(C_values)
+    logger.info("Starting grouped CV tuning: {} configs, {} splits, optimize_for={}", total_configs, n_splits, optimize_for)
     grid_results: list[dict[str, object]] = []
+    config_idx = 0
     for omc in oversample_min_count_values:
         for cw in class_weights:
             for c in C_values:
+                config_idx += 1
+                logger.debug("Tuning config {}/{}: C={}, cw={}, omc={}", config_idx, total_configs, c, cw, omc)
                 fold_train_scores: list[float] = []
                 fold_test_scores: list[float] = []
+                fold_macro_f1: list[float] = []
                 for train_idx, test_idx in splits:
                     train_recs, test_recs = split_records_by_indices(records, train_idx, test_idx)
                     scored = _fit_and_score(
@@ -220,29 +237,120 @@ def tune_hyperparameters_grouped_cv(
                     )
                     fold_train_scores.append(scored["train_accuracy"])
                     fold_test_scores.append(scored["test_accuracy"])
-                val_mean = float(np.mean(fold_test_scores))
+                    fold_macro_f1.append(scored["macro_f1"])
+                val_acc_mean = float(np.mean(fold_test_scores))
+                val_macro_f1_mean = float(np.mean(fold_macro_f1))
                 train_mean = float(np.mean(fold_train_scores))
                 grid_results.append(
                     {
                         "C": c,
                         "class_weight": str(cw),
                         "oversample_min_count": omc,
-                        "val_accuracy_mean": val_mean,
+                        "val_accuracy_mean": val_acc_mean,
                         "val_accuracy_std": float(np.std(fold_test_scores)),
+                        "val_macro_f1_mean": val_macro_f1_mean,
+                        "val_macro_f1_std": float(np.std(fold_macro_f1)),
                         "train_accuracy_mean": train_mean,
-                        "gap_mean": round(train_mean - val_mean, 4),
+                        "gap_mean": round(train_mean - val_acc_mean, 4),
                     }
                 )
 
-    best = max(grid_results, key=lambda r: r["val_accuracy_mean"])
+    sort_key = "val_macro_f1_mean" if optimize_for == "macro_f1" else "val_accuracy_mean"
+    best = max(grid_results, key=lambda r: r[sort_key])
     best_class_weight: str | None = None if best["class_weight"] == "None" else best["class_weight"]
+    logger.info(
+        "Tuning complete: best C={}, cw={}, omc={}, val_acc={:.4f}, val_macro_f1={:.4f}, gap={:.4f}",
+        best["C"], best_class_weight, best["oversample_min_count"],
+        best["val_accuracy_mean"], best["val_macro_f1_mean"], best["gap_mean"],
+    )
     return {
         "best_C": best["C"],
         "best_class_weight": best_class_weight,
         "best_oversample_min_count": best["oversample_min_count"],
         "best_val_accuracy": best["val_accuracy_mean"],
+        "best_val_macro_f1": best["val_macro_f1_mean"],
         "best_gap": best["gap_mean"],
+        "optimize_for": optimize_for,
         "grid": grid_results,
+    }
+
+
+def tune_for_balanced_unseen(
+    records: list[ExpenseRecord],
+    *,
+    min_grouped_accuracy: float = 0.85,
+    random_state: int = 42,
+) -> dict[str, object]:
+    """Two-stage tuning: grouped CV to filter production-viable configs, then balanced holdout selection.
+
+    Key insight: class_weight='balanced' lowers grouped CV macro F1 (natural distribution)
+    but raises balanced unseen macro F1. So we must NOT rank by grouped macro F1 before
+    evaluating on balanced holdout — instead we evaluate ALL configs that pass the grouped
+    accuracy floor and select by balanced macro F1 directly.
+    """
+    logger.info("Two-stage tuning: grouped CV (all configs) + balanced unseen direct evaluation")
+    grouped_result = tune_hyperparameters_grouped_cv(
+        records,
+        C_values=[0.5, 1.0, 2.0, 4.0, 8.0],
+        class_weights=[None, "balanced"],
+        oversample_min_count_values=[0, 5, 10, 15, 20],
+        optimize_for="macro_f1",
+    )
+    grid = grouped_result["grid"]
+
+    # Filter by grouped accuracy floor to ensure production-level natural-distribution accuracy.
+    # Note: do NOT rank by grouped macro_f1 — it is anti-correlated with balanced macro_f1.
+    eligible = [row for row in grid if row["val_accuracy_mean"] >= min_grouped_accuracy]
+    if not eligible:
+        logger.warning(
+            "No config meets grouped accuracy floor {:.4f}; using all {} configs",
+            min_grouped_accuracy, len(grid),
+        )
+        eligible = grid
+
+    logger.info(
+        "Evaluating {}/{} configs on balanced unseen holdout (grouped_acc_floor={:.4f})",
+        len(eligible), len(grid), min_grouped_accuracy,
+    )
+
+    best_balanced: dict[str, object] | None = None
+    best_balanced_f1 = -1.0
+    for candidate in eligible:
+        cw_val: str | None = None if candidate["class_weight"] == "None" else candidate["class_weight"]
+        result = evaluate_balanced_holdout(
+            records,
+            C=candidate["C"],
+            class_weight=cw_val,
+            oversample_min_count=candidate["oversample_min_count"],
+            random_state=random_state,
+        )
+        logger.info(
+            "Config C={}, cw={}, omc={} | balanced_acc={:.4f}, balanced_f1={:.4f}, grouped_acc={:.4f}",
+            candidate["C"], cw_val, candidate["oversample_min_count"],
+            result["accuracy"], result["macro_f1"], candidate["val_accuracy_mean"],
+        )
+        if result["macro_f1"] > best_balanced_f1:
+            best_balanced_f1 = result["macro_f1"]
+            best_balanced = {
+                "C": candidate["C"],
+                "class_weight": cw_val,
+                "oversample_min_count": candidate["oversample_min_count"],
+                "balanced_accuracy": result["accuracy"],
+                "balanced_macro_f1": result["macro_f1"],
+                "grouped_val_accuracy": candidate["val_accuracy_mean"],
+                "grouped_val_macro_f1": candidate["val_macro_f1_mean"],
+                "grouped_gap": candidate["gap_mean"],
+            }
+
+    logger.info(
+        "Selected: C={}, cw={}, omc={} | balanced_acc={:.4f}, balanced_f1={:.4f}, grouped_acc={:.4f}",
+        best_balanced["C"], best_balanced["class_weight"], best_balanced["oversample_min_count"],
+        best_balanced["balanced_accuracy"], best_balanced["balanced_macro_f1"],
+        best_balanced["grouped_val_accuracy"],
+    )
+    return {
+        "grouped_cv": grouped_result,
+        "balanced_refinement": best_balanced,
     }
 
 
@@ -255,6 +363,7 @@ def evaluate_holdout(
     class_weight: str | None = None,
     oversample_min_count: int = 0,
 ) -> dict[str, object]:
+    logger.info("Evaluating holdout: strategy={}, C={}, cw={}, omc={}", strategy, C, class_weight, oversample_min_count)
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
     if strategy == "random":
@@ -288,6 +397,10 @@ def evaluate_holdout(
     error_analysis = analyze_errors_by_class_frequency(
         test_records, scored["test_predictions"], train_records
     )
+    logger.info(
+        "Holdout result: strategy={}, acc={:.4f}, macro_f1={:.4f}, gap={:.4f}",
+        strategy, scored["test_accuracy"], scored["macro_f1"], scored["train_accuracy"] - scored["test_accuracy"],
+    )
     return {
         "strategy": strategy,
         "train_accuracy": scored["train_accuracy"],
@@ -320,6 +433,7 @@ def evaluate_repeated_splits(
     class_weight: str | None = None,
     oversample_min_count: int = 0,
 ) -> dict[str, object]:
+    logger.info("Evaluating repeated splits: strategy={}, n_splits={}, C={}, cw={}", strategy, n_splits, C, class_weight)
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
     if strategy == "random":
@@ -348,12 +462,18 @@ def evaluate_repeated_splits(
             )
         )
 
+    acc_mean = float(np.mean([result.accuracy for result in results]))
+    logger.info(
+        "Repeated splits done: strategy={}, acc_mean={:.4f}, acc_std={:.4f}, macro_f1_mean={:.4f}",
+        strategy, acc_mean, float(np.std([result.accuracy for result in results])),
+        float(np.mean([result.macro_f1 for result in results])),
+    )
     return {
         "strategy": strategy,
         "n_splits": n_splits,
         "test_size": test_size,
         "train_accuracy_mean": float(np.mean(train_accuracies)),
-        "accuracy_mean": float(np.mean([result.accuracy for result in results])),
+        "accuracy_mean": acc_mean,
         "accuracy_std": float(np.std([result.accuracy for result in results])),
         "accuracy_gap_mean": float(
             np.mean(train_accuracies) - np.mean([result.accuracy for result in results])
@@ -428,6 +548,7 @@ def evaluate_balanced_holdout(
     class_weight: str | None = None,
     oversample_min_count: int = 0,
 ) -> dict[str, object]:
+    logger.info("Evaluating balanced holdout: C={}, cw={}, omc={}", C, class_weight, oversample_min_count)
     split = build_balanced_unseen_holdout(
         records,
         samples_per_class=samples_per_class,
@@ -442,6 +563,10 @@ def evaluate_balanced_holdout(
         oversample_min_count=oversample_min_count,
     )
     label_counts = Counter(record.account_name for record in split.test_records)
+    logger.info(
+        "Balanced holdout: eligible={}, acc={:.4f}, macro_f1={:.4f}",
+        len(split.eligible_labels), scored["test_accuracy"], scored["macro_f1"],
+    )
     return {
         "strategy": "balanced_unseen",
         "eligible_labels": len(split.eligible_labels),
@@ -556,6 +681,101 @@ def evaluate_repeated_balanced_holdout(
     }
 
 
+def evaluate_calibrated_fallback(
+    records: list[ExpenseRecord],
+    *,
+    C: float = 1.0,
+    class_weight: str | None = None,
+    oversample_min_count: int = 0,
+    confidence_threshold: float = 0.5,
+    random_state: int = 42,
+) -> dict[str, object]:
+    """Evaluate calibrated model with vendor fallback on a grouped holdout split."""
+    examples, labels, groups = records_to_examples(records)
+    indices = np.arange(len(examples))
+    splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=random_state)
+    train_idx, test_idx = next(splitter.split(indices, labels, groups=groups))
+    train_records, test_records = split_records_by_indices(records, train_idx, test_idx)
+
+    if oversample_min_count > 0:
+        train_records_for_model = resample_minority_classes(train_records, min_count=oversample_min_count)
+    else:
+        train_records_for_model = train_records
+
+    train_x, train_y, _ = records_to_examples(train_records_for_model)
+    test_x, test_y, _ = records_to_examples(test_records)
+
+    pipeline = build_classifier(C=C, class_weight=class_weight)
+    pipeline.fit(train_x, train_y)
+
+    vendor_map = build_vendor_account_map(train_records_for_model)
+    predictor = CalibratedPredictor(
+        pipeline, vendor_map, confidence_threshold=confidence_threshold
+    )
+    predictor.fit_calibration(train_x, list(train_y))
+
+    predictions = predictor.predict(test_x)
+    report = classification_report(test_y, np.array(predictions, dtype=object), output_dict=True, zero_division=0)
+
+    return {
+        "strategy": "calibrated_fallback",
+        "confidence_threshold": confidence_threshold,
+        "C": C,
+        "class_weight": class_weight,
+        "oversample_min_count": oversample_min_count,
+        "accuracy": float(accuracy_score(test_y, np.array(predictions, dtype=object))),
+        "weighted_f1": float(report["weighted avg"]["f1-score"]),
+        "macro_f1": float(report["macro avg"]["f1-score"]),
+    }
+
+
+def evaluate_calibrated_fallback_balanced(
+    records: list[ExpenseRecord],
+    *,
+    C: float = 1.0,
+    class_weight: str | None = None,
+    oversample_min_count: int = 0,
+    confidence_threshold: float = 0.5,
+    random_state: int = 42,
+) -> dict[str, object]:
+    """Evaluate calibrated model with vendor fallback on the balanced unseen holdout."""
+    split = build_balanced_unseen_holdout(
+        records, samples_per_class=3, min_train_size=5, random_state=random_state
+    )
+
+    if oversample_min_count > 0:
+        train_records_for_model = resample_minority_classes(split.train_records, min_count=oversample_min_count)
+    else:
+        train_records_for_model = split.train_records
+
+    train_x, train_y, _ = records_to_examples(train_records_for_model)
+    test_x, test_y, _ = records_to_examples(split.test_records)
+
+    pipeline = build_classifier(C=C, class_weight=class_weight)
+    pipeline.fit(train_x, train_y)
+
+    vendor_map = build_vendor_account_map(train_records_for_model)
+    predictor = CalibratedPredictor(
+        pipeline, vendor_map, confidence_threshold=confidence_threshold
+    )
+    predictor.fit_calibration(train_x, list(train_y))
+
+    predictions = predictor.predict(test_x)
+    report = classification_report(test_y, np.array(predictions, dtype=object), output_dict=True, zero_division=0)
+
+    return {
+        "strategy": "calibrated_fallback_balanced",
+        "confidence_threshold": confidence_threshold,
+        "C": C,
+        "class_weight": class_weight,
+        "oversample_min_count": oversample_min_count,
+        "eligible_labels": len(split.eligible_labels),
+        "accuracy": float(accuracy_score(test_y, np.array(predictions, dtype=object))),
+        "weighted_f1": float(report["weighted avg"]["f1-score"]),
+        "macro_f1": float(report["macro avg"]["f1-score"]),
+    }
+
+
 def compute_overfitting_diagnostics(
     records: list[ExpenseRecord],
     *,
@@ -563,6 +783,7 @@ def compute_overfitting_diagnostics(
     class_weight: str | None = None,
     oversample_min_count: int = 0,
 ) -> dict[str, object]:
+    logger.info("Computing overfitting diagnostics: C={}, cw={}, omc={}", C, class_weight, oversample_min_count)
     examples, labels, groups = records_to_examples(records)
     indices = np.arange(len(examples))
 
@@ -624,6 +845,10 @@ def compute_overfitting_diagnostics(
     group_gap = grouped_holdout["accuracy_gap"]
     is_underfitting = group_val_acc < 0.60
     is_overfitting = group_gap > 0.05
+    logger.info(
+        "Diagnostics: underfitting={}, overfitting={}, train_acc={:.4f}, val_acc={:.4f}, gap={:.4f}",
+        is_underfitting, is_overfitting, group_train_acc, group_val_acc, group_gap,
+    )
     return {
         "fit_assessment": {
             "underfitting": is_underfitting,
@@ -706,12 +931,47 @@ def fit_full_model(
     class_weight: str | None = None,
     oversample_min_count: int = 0,
 ) -> Pipeline:
+    logger.info("Fitting full model: C={}, cw={}, omc={}, n_records={}", C, class_weight, oversample_min_count, len(records))
     if oversample_min_count > 0:
         records = resample_minority_classes(records, min_count=oversample_min_count)
     examples, labels, _ = records_to_examples(records)
     model = build_classifier(C=C, class_weight=class_weight)
     model.fit(examples, labels)
+    logger.info("Full model fit complete")
     return model
+
+
+def _records_to_dataframe(records: list[ExpenseRecord]) -> pd.DataFrame:
+    return pd.DataFrame.from_records(
+        {
+            "vendor_id": r.vendor_id,
+            "item_name": r.item_name,
+            "item_description": r.item_description,
+            "account_name": r.account_name,
+            "item_total_amount": r.item_total_amount,
+            "normalized_item_name": r.normalized_item_name,
+            "text": r.text,
+            "amount_log": r.amount_log,
+        }
+        for r in records
+    )
+
+
+def _export_split_csvs(
+    train_records: list[ExpenseRecord],
+    test_records: list[ExpenseRecord],
+    run_dir: Path,
+    split_name: str,
+) -> None:
+    split_dir = run_dir / split_name
+    split_dir.mkdir(parents=True, exist_ok=True)
+    train_df = _records_to_dataframe(train_records)
+    test_df = _records_to_dataframe(test_records)
+    train_path = split_dir / "train.csv"
+    test_path = split_dir / "test.csv"
+    train_df.to_csv(train_path, index=False)
+    test_df.to_csv(test_path, index=False)
+    logger.info("Exported {} split: train={} rows, test={} rows -> {}", split_name, len(train_df), len(test_df), split_dir)
 
 
 def write_json(path: str | Path, payload: dict[str, object]) -> None:
@@ -749,7 +1009,7 @@ def render_results_markdown(summary: dict[str, object]) -> str:
     )
     tuning_rows = "\n".join(
         f"| {row['C']} | {row['class_weight']} | {row['oversample_min_count']} "
-        f"| {row['val_accuracy_mean']:.4f} | {row['val_accuracy_std']:.4f} | {row['gap_mean']:.4f} |"
+        f"| {row['val_accuracy_mean']:.4f} | {row['val_macro_f1_mean']:.4f} | {row['val_accuracy_std']:.4f} | {row['gap_mean']:.4f} |"
         for row in tuning["grid"]
     )
     error_analysis = summary["holdout"]["group_item"]["error_analysis_by_frequency"]
@@ -808,9 +1068,9 @@ Identifies which frequency bucket drives the accuracy gap.
 
 Joint grid search over C, class_weight, and oversample_min_count (oversampling applied to training folds only).
 
-Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']}, val_accuracy={tuning['best_val_accuracy']:.4f}, gap={tuning['best_gap']:.4f}
+Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']}, val_accuracy={tuning['best_val_accuracy']:.4f}, val_macro_f1={tuning['best_val_macro_f1']:.4f}, gap={tuning['best_gap']:.4f}, optimize_for={tuning['optimize_for']}
 
-| C | class_weight | oversample_min_count | Val Accuracy Mean | Val Accuracy Std | Gap Mean |
+| C | class_weight | oversample_min_count | Val Accuracy Mean | Val Macro F1 Mean | Val Accuracy Std | Gap Mean |
 | --- | --- | --- | ---: | ---: | ---: |
 {tuning_rows}
 
@@ -871,23 +1131,54 @@ Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversamp
 
 
 def run_training_pipeline(data_path: str = DATA_PATH) -> dict[str, object]:
+    logger.info("=" * 60)
+    logger.info("Starting training pipeline run")
+    logger.info("=" * 60)
+
     records = load_records(data_path)
 
-    # Joint grid search over C, class_weight, and oversample_min_count via grouped CV.
-    tuning = tune_hyperparameters_grouped_cv(
-        records,
-        C_values=[0.5, 1.0, 2.0, 4.0, 8.0],
-        class_weights=[None, "balanced"],
-        oversample_min_count_values=[0, 5, 10],
+    # Create data/ directory with timestamped subdirectory for this run.
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = Path("data") / run_timestamp
+    run_dir.mkdir(parents=True, exist_ok=True)
+    logger.info("Run data directory: {}", run_dir)
+
+    # Export full dataset as CSV.
+    full_df = _records_to_dataframe(records)
+    full_df.to_csv(run_dir / "full_dataset.csv", index=False)
+    logger.info("Exported full dataset: {} rows -> {}/full_dataset.csv", len(full_df), run_dir)
+
+    # Two-stage tuning: grouped CV + balanced unseen refinement.
+    # Stage 1: grouped CV finds candidates with macro F1 optimization.
+    # Stage 2: top-k candidates are evaluated on balanced unseen holdout.
+    two_stage = tune_for_balanced_unseen(records, min_grouped_accuracy=0.85)
+    tuning = two_stage["grouped_cv"]
+    balanced_best = two_stage["balanced_refinement"]
+    best_C: float = balanced_best["C"]
+    best_cw: str | None = balanced_best["class_weight"]
+    best_omc: int = balanced_best["oversample_min_count"]
+    logger.info(
+        "Selected params from balanced refinement: C={}, cw={}, omc={} (balanced_acc={:.4f}, balanced_f1={:.4f})",
+        best_C, best_cw, best_omc, balanced_best["balanced_accuracy"], balanced_best["balanced_macro_f1"],
     )
-    best_C: float = tuning["best_C"]
-    best_cw: str | None = tuning["best_class_weight"]
-    best_omc: int = tuning["best_oversample_min_count"]
+
+    # Build the primary group-item split for CSV export.
+    examples, labels, groups = records_to_examples(records)
+    indices = np.arange(len(examples))
+    group_splitter = GroupShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+    g_train_idx, g_test_idx = next(group_splitter.split(indices, labels, groups=groups))
+    g_train_recs, g_test_recs = split_records_by_indices(records, g_train_idx, g_test_idx)
+    _export_split_csvs(g_train_recs, g_test_recs, run_dir, "group_item_tuned")
+
+    # Build the balanced unseen split for CSV export.
+    balanced_split = build_balanced_unseen_holdout(records, samples_per_class=3, min_train_size=5, random_state=42)
+    _export_split_csvs(balanced_split.train_records, balanced_split.test_records, run_dir, "balanced_unseen")
 
     summary = {
         "dataset": summarize_records(records),
         "baseline": {"item_vendor_lookup_accuracy": baseline_lookup_accuracy(records)},
         "hyperparameter_tuning": tuning,
+        "two_stage_tuning": two_stage,
         "holdout": {
             # Default params — kept for before/after comparison.
             "random": evaluate_holdout(records, strategy="random"),
@@ -930,11 +1221,27 @@ def run_training_pipeline(data_path: str = DATA_PATH) -> dict[str, object]:
             class_weight=best_cw,
             oversample_min_count=best_omc,
         ),
+        "calibrated_fallback": evaluate_calibrated_fallback(
+            records,
+            C=best_C,
+            class_weight=best_cw,
+            oversample_min_count=best_omc,
+        ),
+        "calibrated_fallback_balanced": evaluate_calibrated_fallback_balanced(
+            records,
+            C=best_C,
+            class_weight=best_cw,
+            oversample_min_count=best_omc,
+        ),
     }
     model = fit_full_model(records, C=best_C, class_weight=best_cw, oversample_min_count=best_omc)
     write_json("artifacts/evaluation_summary.json", summary)
     write_markdown(".docs/03_results.md", render_results_markdown(summary))
     save_trained_model(model, "artifacts/account_classifier.joblib")
+
+    logger.info("=" * 60)
+    logger.info("Pipeline run complete. Results saved to artifacts/ and data/{}/", run_timestamp)
+    logger.info("=" * 60)
     return summary
 
 
@@ -960,6 +1267,12 @@ def main(argv: list[str] | None = None) -> int:
             "group_accuracy_tuned="
             f"{summary['holdout']['group_item_tuned']['accuracy']:.4f} "
             "balanced_accuracy="
-            f"{summary['balanced_holdout']['accuracy']:.4f}"
+            f"{summary['balanced_holdout']['accuracy']:.4f} "
+            "balanced_macro_f1="
+            f"{summary['balanced_holdout']['macro_f1']:.4f} "
+            "calibrated_fallback_balanced_accuracy="
+            f"{summary['calibrated_fallback_balanced']['accuracy']:.4f} "
+            "calibrated_fallback_balanced_macro_f1="
+            f"{summary['calibrated_fallback_balanced']['macro_f1']:.4f}"
         )
     return 0

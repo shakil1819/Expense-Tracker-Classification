@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from loguru import logger
 from scipy.sparse import csr_matrix
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -75,6 +76,31 @@ class DictAmountScaler(BaseEstimator, TransformerMixin):
         return csr_matrix(self.scaler.transform(values))
 
 
+class DictAmountBinner(BaseEstimator, TransformerMixin):
+    """One-hot encode quantile bins of log-scaled amount."""
+
+    def __init__(self, key: str = "amount_log", n_bins: int = 10) -> None:
+        self.key = key
+        self.n_bins = n_bins
+        self.bin_edges_: np.ndarray | None = None
+
+    def fit(self, X: list[dict[str, object]], y: np.ndarray | None = None) -> "DictAmountBinner":
+        values = np.array([float(row.get(self.key, 0.0)) for row in X], dtype=float)
+        self.bin_edges_ = np.percentile(values, np.linspace(0, 100, self.n_bins + 1))
+        # Deduplicate edges so bincount is consistent.
+        self.bin_edges_ = np.unique(self.bin_edges_)
+        return self
+
+    def transform(self, X: list[dict[str, object]]) -> csr_matrix:
+        values = np.array([float(row.get(self.key, 0.0)) for row in X], dtype=float)
+        bin_indices = np.digitize(values, self.bin_edges_[1:-1])
+        n_bins = len(self.bin_edges_) - 1
+        one_hot = np.zeros((len(X), n_bins), dtype=float)
+        for row_idx, col_idx in enumerate(bin_indices):
+            one_hot[row_idx, min(col_idx, n_bins - 1)] = 1.0
+        return csr_matrix(one_hot)
+
+
 def normalize_text(value: object) -> str:
     text = "" if value is None else str(value)
     text = text.lower().strip()
@@ -88,6 +114,7 @@ def build_text(item_name: object, item_description: object) -> str:
 
 
 def load_records(path: str | Path) -> list[ExpenseRecord]:
+    logger.info("Loading records from {}", path)
     frame = pd.read_json(Path(path))
     frame = frame.assign(
         vendorId=frame["vendorId"].fillna("").astype(str),
@@ -114,6 +141,7 @@ def load_records(path: str | Path) -> list[ExpenseRecord]:
                 amount_log=math.log1p(abs(amount)),
             )
         )
+    logger.info("Loaded {} records from {}", len(records), path)
     return records
 
 
@@ -173,14 +201,18 @@ def resample_minority_classes(
     for record in records:
         by_label[record.account_name].append(record)
     result: list[ExpenseRecord] = list(records)
+    oversampled_count = 0
     for label_records in by_label.values():
         deficit = min_count - len(label_records)
         if deficit > 0:
             result.extend(rng.choices(label_records, k=deficit))
+            oversampled_count += deficit
+    logger.debug("Oversampled {} minority records to reach min_count={}", oversampled_count, min_count)
     return result
 
 
 def build_feature_union() -> FeatureUnion:
+    logger.debug("Building feature union: word_tfidf + item_name_tfidf + char_tfidf + vendor + amount + amount_bins")
     return FeatureUnion(
         [
             (
@@ -193,15 +225,26 @@ def build_feature_union() -> FeatureUnion:
                 ),
             ),
             (
+                "item_name_tfidf",
+                DictTextVectorizer(
+                    key="normalized_item_name",
+                    ngram_range=(1, 2),
+                    min_df=1,
+                    sublinear_tf=True,
+                    strip_accents="unicode",
+                ),
+            ),
+            (
                 "char_tfidf",
                 DictTextVectorizer(
                     analyzer="char_wb",
                     ngram_range=(3, 5),
-                    min_df=2,
+                    min_df=1,
                     sublinear_tf=True,
                 ),
             ),
             ("vendor", DictOneHotEncoder()),
             ("amount", DictAmountScaler()),
+            ("amount_bins", DictAmountBinner()),
         ]
     )

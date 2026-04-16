@@ -1,12 +1,17 @@
-from src.feature_engineering_pipeline import load_records, resample_minority_classes
+from src.feature_engineering_pipeline import DictAmountBinner, load_records, resample_minority_classes
+from src.inference_pipeline import CalibratedPredictor, build_vendor_account_map
 from src.training_pipeline import (
     analyze_errors_by_class_frequency,
     baseline_lookup_accuracy,
     build_balanced_unseen_holdout,
+    build_classifier,
     compute_overfitting_diagnostics,
     evaluate_balanced_holdout,
+    evaluate_calibrated_fallback_balanced,
     evaluate_holdout,
     evaluate_repeated_splits,
+    records_to_examples,
+    tune_for_balanced_unseen,
     tune_hyperparameters_grouped_cv,
 )
 
@@ -46,7 +51,7 @@ def test_balanced_holdout_is_reasonable() -> None:
     records = load_records("accounts-bills.json")
     result = evaluate_balanced_holdout(records)
     assert result["eligible_labels"] >= 50
-    assert result["accuracy"] >= 0.80
+    assert result["accuracy"] >= 0.82
 
 
 def test_balanced_holdout_reports_requested_model_params() -> None:
@@ -104,6 +109,7 @@ def test_tune_hyperparameters_grouped_cv_finds_valid_params() -> None:
     assert tuning["best_class_weight"] in [None, "balanced"]
     assert tuning["best_oversample_min_count"] in [0, 5]
     assert tuning["best_val_accuracy"] >= 0.85
+    assert tuning["best_val_macro_f1"] >= 0.70
     assert 0.0 < tuning["best_gap"] < 0.20
     assert len(tuning["grid"]) == 12  # 3 C × 2 class_weight × 2 oversample
 
@@ -139,3 +145,47 @@ def test_diagnostics_use_requested_model_params() -> None:
     assert fit["C"] == 4.0
     assert fit["class_weight"] is None
     assert fit["oversample_min_count"] == 0
+
+
+def test_amount_binner_produces_correct_shape() -> None:
+    records = load_records("accounts-bills.json")
+    examples, _, _ = records_to_examples(records)
+    binner = DictAmountBinner(n_bins=10)
+    binner.fit(examples)
+    result = binner.transform(examples)
+    assert result.shape[0] == len(records)
+    assert result.shape[1] <= 10
+
+
+def test_vendor_account_map_covers_training_vendors() -> None:
+    records = load_records("accounts-bills.json")
+    vendor_map = build_vendor_account_map(records)
+    vendor_ids = {r.vendor_id for r in records}
+    assert len(vendor_map) == len(vendor_ids)
+    assert all(isinstance(v, str) for v in vendor_map.values())
+
+
+def test_calibrated_fallback_balanced_is_reasonable() -> None:
+    records = load_records("accounts-bills.json")
+    result = evaluate_calibrated_fallback_balanced(
+        records, C=4.0, confidence_threshold=0.5
+    )
+    assert result["accuracy"] >= 0.80
+    assert result["macro_f1"] >= 0.75
+    assert result["strategy"] == "calibrated_fallback_balanced"
+
+
+def test_tune_for_balanced_unseen_finds_valid_params() -> None:
+    records = load_records("accounts-bills.json")
+    result = tune_for_balanced_unseen(
+        records,
+        min_grouped_accuracy=0.85,
+    )
+    assert "grouped_cv" in result
+    assert "balanced_refinement" in result
+    ref = result["balanced_refinement"]
+    assert ref["C"] > 0
+    assert ref["class_weight"] in [None, "balanced"]
+    assert ref["oversample_min_count"] >= 0
+    assert ref["balanced_accuracy"] >= 0.80
+    assert ref["balanced_macro_f1"] >= 0.75
