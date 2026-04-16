@@ -2,19 +2,19 @@
 
 ## Executive Summary
 
-LinearSVC on word TF-IDF, char TF-IDF, vendor one-hot, and log-scaled amount. Overfitting is confirmed on the tuned configuration (train-test gap ≈ 0.09). The fix is grouped cross-validation tuning of `C`, `class_weight`, and `oversample_min_count` to find the best bias-variance trade-off. The tuned model (C=2.0, class_weight=None, oversample_min_count=0) achieves grouped holdout accuracy of 0.8938, up from 0.8938 with defaults.
+LinearSVC on word TF-IDF, char TF-IDF, vendor one-hot, and log-scaled amount. Overfitting is confirmed on the tuned configuration (train-test gap ≈ 0.10). The fix is grouped cross-validation tuning of `C`, `class_weight`, and `oversample_min_count` to find the best bias-variance trade-off. The tuned model (C=1.0, class_weight=None, oversample_min_count=15) achieves grouped holdout accuracy of 0.8907, up from 0.8907 with defaults.
 
 ## Bias / Variance / Overfitting Diagnosis
 
 - **Underfitting**: False
 - **Overfitting**: True
-- **Tuned C**: 1.0
+- **Tuned C**: 4.0
 - **Tuned class_weight**: balanced
-- **Tuned oversample_min_count**: 5
-- **Train accuracy**: 0.9840
-- **Grouped val accuracy**: 0.8938
-- **Gap**: 0.0901
-- Train accuracy 0.984, grouped val accuracy 0.894, gap 0.090. No underfitting. Moderate overfitting — gap 0.090 exceeds 0.05 threshold. Cause: LinearSVC with high-dimensional TF-IDF memorises training phrase patterns. Fix: tune C via grouped CV to find optimal bias-variance trade-off.
+- **Tuned oversample_min_count**: 0
+- **Train accuracy**: 0.9942
+- **Grouped val accuracy**: 0.8907
+- **Gap**: 0.1035
+- Train accuracy 0.994, grouped val accuracy 0.891, gap 0.104. No underfitting. Moderate overfitting — gap 0.104 exceeds 0.05 threshold. Cause: LinearSVC with high-dimensional TF-IDF memorises training phrase patterns. Fix: tune C via grouped CV to find optimal bias-variance trade-off.
 
 ### Root Causes
 
@@ -33,10 +33,10 @@ Identifies which frequency bucket drives the accuracy gap.
 | Frequency Bucket | Test Samples | Correct | Accuracy |
 | --- | ---: | ---: | ---: |
 | singleton (n=1) | 3 | 3 | 1.0000 |
-| very_rare (2-4) | 7 | 5 | 0.7143 |
-| rare (5-19) | 91 | 68 | 0.7473 |
-| medium (20-99) | 313 | 289 | 0.9233 |
-| frequent (100+) | 525 | 477 | 0.9086 |
+| very_rare (2-4) | 7 | 4 | 0.5714 |
+| rare (5-19) | 91 | 69 | 0.7582 |
+| medium (20-99) | 313 | 288 | 0.9201 |
+| frequent (100+) | 525 | 475 | 0.9048 |
 
 ## Error Analysis by Class Training Frequency (Tuned Model)
 
@@ -44,68 +44,68 @@ Identifies which frequency bucket drives the accuracy gap.
 | --- | ---: | ---: | ---: |
 | singleton (n=1) | 3 | 3 | 1.0000 |
 | very_rare (2-4) | 7 | 5 | 0.7143 |
-| rare (5-19) | 91 | 76 | 0.8352 |
-| medium (20-99) | 313 | 292 | 0.9329 |
-| frequent (100+) | 525 | 466 | 0.8876 |
+| rare (5-19) | 91 | 70 | 0.7692 |
+| medium (20-99) | 313 | 287 | 0.9169 |
+| frequent (100+) | 525 | 474 | 0.9029 |
 
 ## Hyperparameter Tuning (Grouped 5-Fold CV)
 
 Joint grid search over C, class_weight, and oversample_min_count (oversampling applied to training folds only).
 
-Best: C=2.0, class_weight=None, oversample_min_count=0, val_accuracy=0.8834, val_macro_f1=0.7388, gap=0.1119, optimize_for=macro_f1
+Best: C=1.0, class_weight=None, oversample_min_count=15, val_accuracy=0.8801, val_macro_f1=0.7359, gap=0.1155, optimize_for=macro_f1
 
 | C | class_weight | oversample_min_count | Val Accuracy Mean | Val Macro F1 Mean | Val Accuracy Std | Gap Mean |
 | --- | --- | --- | ---: | ---: | ---: |
-| 0.5 | None | 0 | 0.8782 | 0.7316 | 0.0153 | 0.1136 |
-| 1.0 | None | 0 | 0.8815 | 0.7384 | 0.0155 | 0.1128 |
-| 2.0 | None | 0 | 0.8834 | 0.7388 | 0.0158 | 0.1119 |
-| 4.0 | None | 0 | 0.8826 | 0.7317 | 0.0159 | 0.1137 |
-| 8.0 | None | 0 | 0.8789 | 0.7269 | 0.0165 | 0.1179 |
-| 0.5 | balanced | 0 | 0.8717 | 0.7295 | 0.0177 | 0.1062 |
-| 1.0 | balanced | 0 | 0.8746 | 0.7291 | 0.0165 | 0.1104 |
-| 2.0 | balanced | 0 | 0.8779 | 0.7236 | 0.0171 | 0.1119 |
-| 4.0 | balanced | 0 | 0.8785 | 0.7205 | 0.0155 | 0.1149 |
-| 8.0 | balanced | 0 | 0.8779 | 0.7200 | 0.0167 | 0.1162 |
-| 0.5 | None | 5 | 0.8776 | 0.7236 | 0.0146 | 0.1141 |
-| 1.0 | None | 5 | 0.8801 | 0.7322 | 0.0148 | 0.1144 |
-| 2.0 | None | 5 | 0.8821 | 0.7332 | 0.0163 | 0.1132 |
-| 4.0 | None | 5 | 0.8814 | 0.7334 | 0.0165 | 0.1150 |
-| 8.0 | None | 5 | 0.8789 | 0.7349 | 0.0170 | 0.1179 |
-| 0.5 | balanced | 5 | 0.8722 | 0.7259 | 0.0183 | 0.1064 |
-| 1.0 | balanced | 5 | 0.8746 | 0.7255 | 0.0169 | 0.1110 |
-| 2.0 | balanced | 5 | 0.8777 | 0.7272 | 0.0175 | 0.1126 |
-| 4.0 | balanced | 5 | 0.8789 | 0.7263 | 0.0163 | 0.1148 |
-| 8.0 | balanced | 5 | 0.8781 | 0.7254 | 0.0169 | 0.1163 |
-| 0.5 | None | 10 | 0.8784 | 0.7257 | 0.0144 | 0.1137 |
-| 1.0 | None | 10 | 0.8817 | 0.7314 | 0.0151 | 0.1131 |
-| 2.0 | None | 10 | 0.8826 | 0.7346 | 0.0165 | 0.1132 |
-| 4.0 | None | 10 | 0.8805 | 0.7317 | 0.0162 | 0.1160 |
-| 8.0 | None | 10 | 0.8773 | 0.7310 | 0.0168 | 0.1196 |
-| 0.5 | balanced | 10 | 0.8722 | 0.7242 | 0.0178 | 0.1079 |
-| 1.0 | balanced | 10 | 0.8739 | 0.7223 | 0.0168 | 0.1125 |
-| 2.0 | balanced | 10 | 0.8771 | 0.7232 | 0.0164 | 0.1135 |
-| 4.0 | balanced | 10 | 0.8789 | 0.7242 | 0.0160 | 0.1152 |
-| 8.0 | balanced | 10 | 0.8766 | 0.7211 | 0.0158 | 0.1181 |
-| 0.5 | None | 15 | 0.8782 | 0.7229 | 0.0149 | 0.1142 |
-| 1.0 | None | 15 | 0.8811 | 0.7267 | 0.0145 | 0.1137 |
-| 2.0 | None | 15 | 0.8807 | 0.7296 | 0.0150 | 0.1150 |
-| 4.0 | None | 15 | 0.8801 | 0.7325 | 0.0165 | 0.1164 |
-| 8.0 | None | 15 | 0.8775 | 0.7301 | 0.0181 | 0.1196 |
-| 0.5 | balanced | 15 | 0.8725 | 0.7243 | 0.0159 | 0.1088 |
-| 1.0 | balanced | 15 | 0.8748 | 0.7224 | 0.0164 | 0.1126 |
-| 2.0 | balanced | 15 | 0.8771 | 0.7254 | 0.0158 | 0.1142 |
-| 4.0 | balanced | 15 | 0.8789 | 0.7237 | 0.0162 | 0.1153 |
-| 8.0 | balanced | 15 | 0.8773 | 0.7199 | 0.0162 | 0.1177 |
-| 0.5 | None | 20 | 0.8778 | 0.7215 | 0.0141 | 0.1153 |
-| 1.0 | None | 20 | 0.8815 | 0.7267 | 0.0135 | 0.1138 |
-| 2.0 | None | 20 | 0.8813 | 0.7285 | 0.0154 | 0.1151 |
-| 4.0 | None | 20 | 0.8807 | 0.7304 | 0.0166 | 0.1162 |
-| 8.0 | None | 20 | 0.8762 | 0.7246 | 0.0183 | 0.1209 |
-| 0.5 | balanced | 20 | 0.8727 | 0.7231 | 0.0156 | 0.1102 |
-| 1.0 | balanced | 20 | 0.8758 | 0.7276 | 0.0158 | 0.1126 |
-| 2.0 | balanced | 20 | 0.8781 | 0.7273 | 0.0144 | 0.1140 |
-| 4.0 | balanced | 20 | 0.8791 | 0.7249 | 0.0166 | 0.1159 |
-| 8.0 | balanced | 20 | 0.8760 | 0.7203 | 0.0143 | 0.1199 |
+| 0.5 | None | 0 | 0.8764 | 0.7292 | 0.0151 | 0.1173 |
+| 1.0 | None | 0 | 0.8799 | 0.7323 | 0.0150 | 0.1154 |
+| 2.0 | None | 0 | 0.8803 | 0.7254 | 0.0167 | 0.1157 |
+| 4.0 | None | 0 | 0.8774 | 0.7249 | 0.0174 | 0.1190 |
+| 8.0 | None | 0 | 0.8742 | 0.7211 | 0.0168 | 0.1227 |
+| 0.5 | balanced | 0 | 0.8715 | 0.7233 | 0.0162 | 0.1113 |
+| 1.0 | balanced | 0 | 0.8745 | 0.7219 | 0.0162 | 0.1139 |
+| 2.0 | balanced | 0 | 0.8775 | 0.7227 | 0.0149 | 0.1135 |
+| 4.0 | balanced | 0 | 0.8766 | 0.7196 | 0.0160 | 0.1176 |
+| 8.0 | balanced | 0 | 0.8771 | 0.7214 | 0.0166 | 0.1180 |
+| 0.5 | None | 5 | 0.8766 | 0.7296 | 0.0142 | 0.1171 |
+| 1.0 | None | 5 | 0.8803 | 0.7324 | 0.0148 | 0.1150 |
+| 2.0 | None | 5 | 0.8801 | 0.7307 | 0.0176 | 0.1159 |
+| 4.0 | None | 5 | 0.8778 | 0.7278 | 0.0177 | 0.1186 |
+| 8.0 | None | 5 | 0.8744 | 0.7261 | 0.0169 | 0.1224 |
+| 0.5 | balanced | 5 | 0.8715 | 0.7221 | 0.0162 | 0.1118 |
+| 1.0 | balanced | 5 | 0.8749 | 0.7251 | 0.0162 | 0.1137 |
+| 2.0 | balanced | 5 | 0.8777 | 0.7244 | 0.0156 | 0.1136 |
+| 4.0 | balanced | 5 | 0.8773 | 0.7249 | 0.0160 | 0.1170 |
+| 8.0 | balanced | 5 | 0.8779 | 0.7316 | 0.0168 | 0.1172 |
+| 0.5 | None | 10 | 0.8772 | 0.7293 | 0.0143 | 0.1168 |
+| 1.0 | None | 10 | 0.8803 | 0.7342 | 0.0138 | 0.1154 |
+| 2.0 | None | 10 | 0.8802 | 0.7344 | 0.0164 | 0.1161 |
+| 4.0 | None | 10 | 0.8777 | 0.7301 | 0.0155 | 0.1189 |
+| 8.0 | None | 10 | 0.8744 | 0.7249 | 0.0168 | 0.1225 |
+| 0.5 | balanced | 10 | 0.8713 | 0.7192 | 0.0150 | 0.1130 |
+| 1.0 | balanced | 10 | 0.8736 | 0.7215 | 0.0147 | 0.1156 |
+| 2.0 | balanced | 10 | 0.8771 | 0.7243 | 0.0155 | 0.1147 |
+| 4.0 | balanced | 10 | 0.8771 | 0.7294 | 0.0155 | 0.1175 |
+| 8.0 | balanced | 10 | 0.8783 | 0.7306 | 0.0171 | 0.1170 |
+| 0.5 | None | 15 | 0.8757 | 0.7301 | 0.0138 | 0.1184 |
+| 1.0 | None | 15 | 0.8801 | 0.7359 | 0.0139 | 0.1155 |
+| 2.0 | None | 15 | 0.8801 | 0.7350 | 0.0162 | 0.1162 |
+| 4.0 | None | 15 | 0.8775 | 0.7306 | 0.0160 | 0.1192 |
+| 8.0 | None | 15 | 0.8740 | 0.7264 | 0.0179 | 0.1230 |
+| 0.5 | balanced | 15 | 0.8705 | 0.7229 | 0.0148 | 0.1149 |
+| 1.0 | balanced | 15 | 0.8734 | 0.7243 | 0.0149 | 0.1164 |
+| 2.0 | balanced | 15 | 0.8773 | 0.7250 | 0.0162 | 0.1150 |
+| 4.0 | balanced | 15 | 0.8777 | 0.7297 | 0.0164 | 0.1172 |
+| 8.0 | balanced | 15 | 0.8783 | 0.7303 | 0.0172 | 0.1172 |
+| 0.5 | None | 20 | 0.8770 | 0.7252 | 0.0135 | 0.1176 |
+| 1.0 | None | 20 | 0.8801 | 0.7314 | 0.0136 | 0.1159 |
+| 2.0 | None | 20 | 0.8799 | 0.7311 | 0.0155 | 0.1169 |
+| 4.0 | None | 20 | 0.8770 | 0.7283 | 0.0158 | 0.1199 |
+| 8.0 | None | 20 | 0.8733 | 0.7227 | 0.0185 | 0.1238 |
+| 0.5 | balanced | 20 | 0.8715 | 0.7195 | 0.0151 | 0.1150 |
+| 1.0 | balanced | 20 | 0.8740 | 0.7232 | 0.0152 | 0.1169 |
+| 2.0 | balanced | 20 | 0.8774 | 0.7254 | 0.0150 | 0.1159 |
+| 4.0 | balanced | 20 | 0.8770 | 0.7276 | 0.0148 | 0.1186 |
+| 8.0 | balanced | 20 | 0.8785 | 0.7318 | 0.0160 | 0.1177 |
 
 ## Why The Split Strategy Changed
 
@@ -125,49 +125,49 @@ Best: C=2.0, class_weight=None, oversample_min_count=0, val_accuracy=0.8834, val
 
 | Model | Grouped Holdout Accuracy | Repeated Mean ± Std | Macro F1 | Train-Test Gap |
 | --- | ---: | ---: | ---: | ---: |
-| Default (C=1.0, cw=None) | 0.8938 | 0.8815 ± 0.0155 | 0.7641 | 0.1001 |
-| Tuned (C=2.0, cw=None) | 0.8938 | 0.8746 ± 0.0169 | 0.7833 | 0.0901 |
+| Default (C=1.0, cw=None) | 0.8907 | 0.8799 ± 0.0150 | 0.7509 | 0.1043 |
+| Tuned (C=1.0, cw=None) | 0.8907 | 0.8766 ± 0.0160 | 0.7568 | 0.1035 |
 
-- Random holdout accuracy (default): 0.8948 (optimistic — item-name leakage)
+- Random holdout accuracy (default): 0.8989 (optimistic — item-name leakage)
 
 ## Balanced Unseen Benchmark
 
 - Eligible labels: 64
 - Samples per class: 3
-- Balanced holdout accuracy: 0.8542
-- Balanced holdout macro F1: 0.8252
-- Repeated balanced accuracy mean with tuned model: 0.8521 +/- 0.0107
-- Repeated balanced macro F1 mean with tuned model: 0.8141
-- Repeated balanced accuracy mean with `class_weight='balanced'`: 0.8521
-- Repeated balanced macro F1 mean with `class_weight='balanced'`: 0.8141
+- Balanced holdout accuracy: 0.8490
+- Balanced holdout macro F1: 0.8179
+- Repeated balanced accuracy mean with tuned model: 0.8469 +/- 0.0188
+- Repeated balanced macro F1 mean with tuned model: 0.8118
+- Repeated balanced accuracy mean with `class_weight='balanced'`: 0.8469
+- Repeated balanced macro F1 mean with `class_weight='balanced'`: 0.8118
 
 ## Learning Curve
 
 | Train Size | Train Accuracy | Validation Accuracy |
 | --- | ---: | ---: |
-| 790 | 0.9852 | 0.5807 |
-| 1580 | 0.9797 | 0.7170 |
-| 2371 | 0.9779 | 0.7922 |
-| 3161 | 0.9781 | 0.8408 |
-| 3952 | 0.9796 | 0.8699 |
+| 790 | 0.9958 | 0.5833 |
+| 1580 | 0.9928 | 0.7097 |
+| 2371 | 0.9904 | 0.7826 |
+| 3161 | 0.9895 | 0.8356 |
+| 3952 | 0.9908 | 0.8713 |
 
 ## Validation Curve (GroupShuffleSplit 3-fold, grouped by item name)
 
 | C | Train Accuracy | Validation Accuracy |
 | --- | ---: | ---: |
-| 0.1 | 0.9422 | 0.8307 |
-| 0.25 | 0.9632 | 0.8584 |
-| 0.5 | 0.9731 | 0.8636 |
-| 1.0 | 0.9796 | 0.8699 |
-| 2.0 | 0.9862 | 0.8736 |
-| 4.0 | 0.9896 | 0.8729 |
-| 8.0 | 0.9916 | 0.8716 |
-| 16.0 | 0.9931 | 0.8703 |
+| 0.1 | 0.9525 | 0.8409 |
+| 0.25 | 0.9691 | 0.8599 |
+| 0.5 | 0.9770 | 0.8668 |
+| 1.0 | 0.9831 | 0.8733 |
+| 2.0 | 0.9876 | 0.8736 |
+| 4.0 | 0.9908 | 0.8713 |
+| 8.0 | 0.9925 | 0.8688 |
+| 16.0 | 0.9942 | 0.8654 |
 
 ## Conclusion
 
-- Overfitting confirmed: train≈0.99, grouped val≈0.89, gap≈0.09.
+- Overfitting confirmed: train≈0.99, grouped val≈0.89, gap≈0.10.
 - Error analysis shows the gap is driven by rare-class test samples — see the frequency bucket table above.
-- Fix applied: joint grouped CV tuning over C, class_weight, and oversample_min_count identified C=2.0, class_weight=None, oversample_min_count=0 as optimal.
+- Fix applied: joint grouped CV tuning over C, class_weight, and oversample_min_count identified C=1.0, class_weight=None, oversample_min_count=15 as optimal.
 - Oversampling duplicates minority-class training records to the threshold during training only; test folds are never touched.
-- Tuned model achieves grouped holdout accuracy 0.8938 (was 0.8938) and gap 0.0901 (was 0.1001).
+- Tuned model achieves grouped holdout accuracy 0.8907 (was 0.8907) and gap 0.1035 (was 0.1043).
