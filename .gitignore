@@ -12,6 +12,7 @@ artifacts/*.joblib
 
 # Run data exports
 data/
+uv.lock
 
 # Temporary scripts
 quick_eval*.py
