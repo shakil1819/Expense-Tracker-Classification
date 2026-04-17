@@ -14,6 +14,11 @@ artifacts/*.joblib
 data/
 uv.lock
 
+# MLflow local state
+mlruns/
+mlartifacts/
+mlflow.db
+
 # Temporary scripts
 quick_eval*.py
 

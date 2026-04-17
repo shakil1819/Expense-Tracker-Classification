@@ -138,16 +138,21 @@ src/
   feature_engineering_pipeline.py  # Data loading, text normalisation, feature transformers
   training_pipeline.py             # Model training, evaluation, tuning, diagnostics
   inference_pipeline.py            # CalibratedPredictor, save/load, predict API
+  tracker.py                       # MLflow integration: tracking, registry, tracing, one-click retrain
 tests/
-  test_model.py                    # 18 unit tests covering all pipeline components
+  test_model.py                    # Pipeline, tuning, and evaluation tests
   test_data.py                     # Data loading and normalisation tests
+  test_tracker.py                  # MLflow tracker tests
 artifacts/
   evaluation_summary.json          # Full metrics from last pipeline run
   account_classifier.joblib        # Serialised trained model
+mlruns/                            # Local MLflow experiment store (file backend, gitignored)
 .docs/
   01_plan.md                       # Initial plan
   02_eda.md                        # EDA findings
   03_results.md                    # Auto-generated results report
+  04_tutorial.md                   # End-to-end tutorial
+  05_mlflow.md                     # MLflow tracker usage guide
   05_split_strategy_review.md      # Validation strategy analysis
   06_rare_class_improvements.md    # Rare-class tuning decisions and rationale
 ```
@@ -156,7 +161,7 @@ artifacts/
 
 ## Quickstart
 
-**Requirements**: Python 3.11+, [uv](https://github.com/astral-sh/uv)
+**Requirements**: Python 3.14+, [uv](https://github.com/astral-sh/uv)
 
 ```powershell
 # Install dependencies
@@ -174,9 +179,51 @@ Outputs written to:
 - `data/<timestamp>/` - train/test CSV exports for each split
 
 ```powershell
-# Run all 18 tests
-python -m pytest
+# Run the test suite (27 tests)
+uv run pytest
 ```
+
+---
+
+## MLflow Integration
+
+`src/tracker.py` wraps the training pipeline with MLflow 3.x: experiment
+tracking, dataset validation and versioning, a metric card view, tracing, and a
+model registry with a `champion` alias.
+
+**One-click retrain** (runs the full pipeline under a fresh MLflow run, logs
+params / metrics / dataset / artifacts / model, and promotes the new version to
+`champion`):
+
+```powershell
+uv run python -m src.tracker retrain
+```
+
+**Local tracking server** (SQLite backend, browsable UI at <http://127.0.0.1:5000>):
+
+```powershell
+uv run python -m src.tracker server --backend-store-uri "sqlite:///mlflow.db" --artifacts-destination ".\mlartifacts"
+```
+
+**Load the registered champion model**:
+
+```python
+from src.tracker import MLflowTracker
+model = MLflowTracker().load_model("champion")
+preds = model.predict(list_of_feature_dicts)
+```
+
+Full guide: `.docs/05_mlflow.md`.
+
+What gets logged per run:
+
+- **Params**: best `C`, `class_weight`, `oversample_min_count`, dataset shape
+- **Metrics**: baseline lookup, random / grouped / grouped-tuned holdout, balanced unseen, calibrated fallback (accuracy + macro F1 + train-test gap)
+- **Metric card**: tabular comparison renderable in the MLflow UI
+- **Dataset**: schema-validated `mlflow.data.PandasDataset` with row count and null counts
+- **Artifacts**: `evaluation_summary.json`, `.docs/03_results.md`, `account_classifier.joblib`
+- **Model**: registered as `peakflo-account-classifier`, aliased `champion`
+- **Trace**: `run_training_pipeline` wrapped in an `mlflow.trace` span
 
 ---
 
