@@ -125,6 +125,31 @@ def test_log_and_register_model_round_trip(tracker):
     assert len(preds) == len(X)
 
 
+def test_retrain_required_columns_match_expense_record_fields():
+    """Regression guard: retrain's validate_dataset column list must match
+    the actual ExpenseRecord schema. Caught a real bug where 'amount' was
+    required but the field is 'item_total_amount'.
+    """
+    from dataclasses import fields
+
+    from src.feature_engineering_pipeline import ExpenseRecord
+    from src.tracker import retrain as _retrain  # noqa: F401
+
+    # Extract the literal list from the retrain source to avoid drifting
+    import inspect
+    import re
+
+    from src import tracker as tracker_mod
+
+    src = inspect.getsource(tracker_mod.retrain)
+    match = re.search(r"required_columns\s*=\s*\[([^\]]+)\]", src)
+    assert match is not None, "could not find required_columns in retrain()"
+    required = [c.strip().strip('"').strip("'") for c in match.group(1).split(",")]
+    record_fields = {f.name for f in fields(ExpenseRecord)}
+    missing = [c for c in required if c not in record_fields]
+    assert not missing, f"retrain requires columns missing from ExpenseRecord: {missing}"
+
+
 def test_traced_decorator_runs_function_unchanged(tracker):
     @MLflowTracker.traced(name="adder")
     def add(a, b):

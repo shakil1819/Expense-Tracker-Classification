@@ -353,7 +353,7 @@ def retrain(
         df = _records_to_dataframe(records)
         tracker.validate_dataset(
             df,
-            required_columns=["account_name", "vendor_id", "item_name", "amount"],
+            required_columns=["account_name", "vendor_id", "item_name", "item_total_amount"],
             min_rows=100,
         )
         tracker.log_dataset(df, name=path, targets="account_name", context="training")

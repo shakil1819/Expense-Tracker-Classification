@@ -176,7 +176,7 @@ equivalent.
   bypass `main.py` / `src.tracker` and call `mlflow.start_run` directly. Set
   `$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"` before that call.
 - **`ValueError: Dataset missing required columns`** - `accounts-bills.json`
-  lost one of `account_name`, `vendor_id`, `item_name`, `amount`. Fix the
+  lost one of `account_name`, `vendor_id`, `item_name`, `item_total_amount`. Fix the
   source file; validation is intentionally strict.
 - **Port 5000 already in use by a non-MLflow process** - stop that process or
   edit `DEFAULT_SERVER_PORT` in `src/tracker.py`. Port reuse by an existing
