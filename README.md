@@ -9,7 +9,7 @@
 | File | Description |
 |---|---|
 | `notebooks/expense_classification_report.ipynb` | End-to-end interactive report: EDA, feature engineering, training, evaluation, overfitting diagnosis |
-| `description.md` | Written description of approach, design decisions, results, and limitations |
+| [`description.md`](description.md) | Written description of approach, design decisions, results, and limitations |
 | `README.md` | This file - setup and run instructions |
 | `src/` | Python package: feature engineering, training, inference, MLflow tracker |
 | `artifacts/evaluation_summary.json` | Full metrics from the last pipeline run |
