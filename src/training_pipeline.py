@@ -1071,7 +1071,7 @@ Joint grid search over C, class_weight, and oversample_min_count (oversampling a
 Best: C={tuning['best_C']}, class_weight={tuning['best_class_weight']}, oversample_min_count={tuning['best_oversample_min_count']}, val_accuracy={tuning['best_val_accuracy']:.4f}, val_macro_f1={tuning['best_val_macro_f1']:.4f}, gap={tuning['best_gap']:.4f}, optimize_for={tuning['optimize_for']}
 
 | C | class_weight | oversample_min_count | Val Accuracy Mean | Val Macro F1 Mean | Val Accuracy Std | Gap Mean |
-| --- | --- | --- | ---: | ---: | ---: |
+| --- | --- | --- | ---: | ---: | ---: | ---: |
 {tuning_rows}
 
 ## Why The Split Strategy Changed
