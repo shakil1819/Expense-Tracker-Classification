@@ -167,16 +167,21 @@ mlruns/                            # Local MLflow experiment store (file backend
 # Install dependencies
 uv sync
 
-# Train, evaluate, and save model
+# Train, evaluate, save the model, and open the MLflow dashboard
 . .\.venv\Scripts\Activate.ps1
 uv run main.py
 ```
+
+`uv run main.py` auto-boots an MLflow tracking server at
+<http://127.0.0.1:5000> (if not already running) and records the run there.
+Use `uv run main.py --no-track` to skip MLflow entirely.
 
 Outputs written to:
 - `artifacts/evaluation_summary.json` - full metrics
 - `artifacts/account_classifier.joblib` - trained model
 - `.docs/03_results.md` - formatted results report
 - `data/<timestamp>/` - train/test CSV exports for each split
+- `mlflow.db` + `mlartifacts/` - MLflow backend + artifact store (tracked mode)
 
 ```powershell
 # Run the test suite (27 tests)
@@ -187,26 +192,27 @@ uv run pytest
 
 ## MLflow Integration
 
-Two commands, one dashboard.
-
-**Terminal A - start the UI** (keep running):
+One command does everything:
 
 ```powershell
 . .\.venv\Scripts\Activate.ps1
-uv run python -m src.tracker server --backend-store-uri "sqlite:///mlflow.db" --artifacts-destination ".\mlartifacts"
+uv run main.py
 ```
 
-Open <http://127.0.0.1:5000>.
+This auto-boots the MLflow server (if not already running) at
+<http://127.0.0.1:5000>, points runs at it, and executes the tracked training
+pipeline. The dashboard stays up after training so you can browse results.
 
-**Terminal B - run a tracked training** (point at the server, then retrain):
+Variants:
 
 ```powershell
-. .\.venv\Scripts\Activate.ps1
-$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
-uv run python -m src.tracker retrain
+uv run main.py --run-name my-experiment   # custom run name in the UI
+uv run main.py --no-track                 # skip MLflow, raw pipeline only
+uv run python -m src.tracker server       # foreground server only
+uv run python -m src.tracker retrain      # tracked run, server must already be up
 ```
 
-One retrain run populates the dashboard with:
+One run populates the dashboard with:
 
 | Tab | Contents |
 |---|---|

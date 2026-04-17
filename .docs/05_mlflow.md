@@ -1,6 +1,6 @@
 # MLflow: how to run, what to run, what to see
 
-Operator guide. Everything you need is produced by two commands: one to train, one to view.
+Operator guide. One command does everything.
 
 ## 0. Activate env once
 
@@ -8,44 +8,38 @@ Operator guide. Everything you need is produced by two commands: one to train, o
 . .\.venv\Scripts\Activate.ps1
 ```
 
-## 1. Start the MLflow UI (keep running in its own terminal)
+## 1. Run it
 
 ```pwsh
-uv run python -m src.tracker server --backend-store-uri "sqlite:///mlflow.db" --artifacts-destination ".\mlartifacts"
+uv run main.py
 ```
 
-Open <http://127.0.0.1:5000>. Leave this terminal running.
+That single command:
 
-First time you open it, you see the landing page with an empty experiment list
-until a run is recorded.
+1. Checks whether an MLflow server is already listening on
+   <http://127.0.0.1:5000>. If not, spawns `mlflow server` as a detached
+   background process (SQLite backend `mlflow.db`, artifacts in `.\mlartifacts`)
+   and waits for its `/health` endpoint. Log goes to `mlflow_server.log`.
+2. Sets `MLFLOW_TRACKING_URI` so all logging goes to that server.
+3. Runs the full training pipeline (load data, validate, two-stage tuning, all
+   holdouts, diagnostics, save joblib) inside a single tracked MLflow run.
+4. Registers the trained model under `peakflo-account-classifier` and promotes
+   the new version to the `champion` alias.
+5. Leaves the dashboard running so you can browse results immediately.
 
-## 2. Point runs at that server (one-time per new shell)
+Expect ~15-25 minutes on laptop hardware. Open <http://127.0.0.1:5000> in a
+browser any time during or after the run.
+
+### Variants
 
 ```pwsh
-$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
+uv run main.py --run-name my-experiment   # custom run name in the UI
+uv run main.py --no-track                 # skip MLflow, raw pipeline only
+uv run python -m src.tracker retrain      # tracked run without touching main.py
+uv run python -m src.tracker server       # foreground server only (Ctrl+C stops it)
 ```
 
-If you skip this, runs go to the local `./mlruns` folder and the server UI
-will not see them. Set the env var before `retrain`.
-
-## 3. Trigger a full tracked training run
-
-```pwsh
-uv run python -m src.tracker retrain
-```
-
-This executes the full pipeline (load data, two-stage tuning, all holdouts,
-diagnostics, save joblib) inside a single MLflow run. Expect ~15-25 minutes
-on laptop hardware.
-
-Equivalent from Python:
-
-```python
-from src.tracker import retrain
-summary = retrain(run_name="manual-retrain")
-```
-
-## 4. What you see in the MLflow dashboard
+## 2. What you see in the MLflow dashboard
 
 Open the UI -> click **Experiments** -> `peakflo-expense-classifier` -> click
 the latest run (named `run-YYYYMMDD-HHMMSS`). You get these tabs:
@@ -125,7 +119,7 @@ Because `run_training_pipeline` is wrapped in `mlflow.trace`, you get a span
 for the pipeline execution with start/end timestamps. Useful for spotting
 which stage blew up when a run fails.
 
-## 5. What you see under Models -> `peakflo-account-classifier`
+## 3. What you see under Models -> `peakflo-account-classifier`
 
 - Every `retrain` creates a new **version** (v1, v2, ...).
 - Latest version is tagged with alias `champion`.
@@ -133,7 +127,7 @@ which stage blew up when a run fails.
   (if any), and the artifacts tied to that version.
 - Promote/demote aliases in the UI or via the API to do blue/green rollouts.
 
-## 6. Load the registered model from Python
+## 4. Load the registered model from Python
 
 ```python
 from src.tracker import MLflowTracker
@@ -148,13 +142,13 @@ Or smoke-test from the CLI:
 uv run python -m src.tracker load-champion
 ```
 
-## 7. Compare runs
+## 5. Compare runs
 
 In the UI, check two or more run rows in the experiment table and click
 **Compare**. You get side-by-side parameters, metrics, and a parallel-coordinates
 plot. Useful after changing a hyperparameter or dataset.
 
-## 8. Where things live on disk
+## 6. Where things live on disk
 
 - `mlflow.db` - SQLite backend with run metadata (gitignored)
 - `mlartifacts/` - artifact blobs, including the joblib file and the MLmodel
@@ -178,12 +172,17 @@ equivalent.
 
 ## Troubleshooting
 
-- **Run shows up in `./mlruns` instead of the server UI** - you forgot to set
-  `MLFLOW_TRACKING_URI=http://127.0.0.1:5000` in the shell that ran `retrain`.
+- **Run shows up in `./mlruns` instead of the server UI** - only happens if you
+  bypass `main.py` / `src.tracker` and call `mlflow.start_run` directly. Set
+  `$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"` before that call.
 - **`ValueError: Dataset missing required columns`** - `accounts-bills.json`
   lost one of `account_name`, `vendor_id`, `item_name`, `amount`. Fix the
   source file; validation is intentionally strict.
-- **Server port already in use** - pass `--port 5050` to `src.tracker server`.
+- **Port 5000 already in use by a non-MLflow process** - stop that process or
+  edit `DEFAULT_SERVER_PORT` in `src/tracker.py`. Port reuse by an existing
+  MLflow server is automatic and intended.
+- **Server did not become ready in 30s** - check `mlflow_server.log` in the
+  repo root; usually a dependency or port issue.
 
 ## Tests
 

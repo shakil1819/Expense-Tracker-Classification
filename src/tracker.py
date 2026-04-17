@@ -22,6 +22,9 @@ import json
 import os
 import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -391,12 +394,29 @@ def retrain(
 
 # -- tracking server launcher ------------------------------------------------
 
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 5000
+DEFAULT_BACKEND_URI = "sqlite:///mlflow.db"
+DEFAULT_ARTIFACTS_DIR = "./mlartifacts"
+
+
+def _is_server_up(url: str, timeout: float = 1.0) -> bool:
+    """Return True if an MLflow server is reachable at ``url``."""
+    probe = url.rstrip("/") + "/health"
+    try:
+        with urllib.request.urlopen(probe, timeout=timeout) as resp:
+            return 200 <= resp.status < 500
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        return False
+
+
 def start_tracking_server(
-    host: str = "127.0.0.1",
-    port: int = 5000,
-    backend_store_uri: str = "sqlite:///mlflow.db",
-    artifacts_destination: str = "./mlartifacts",
+    host: str = DEFAULT_SERVER_HOST,
+    port: int = DEFAULT_SERVER_PORT,
+    backend_store_uri: str = DEFAULT_BACKEND_URI,
+    artifacts_destination: str = DEFAULT_ARTIFACTS_DIR,
 ) -> None:
+    """Run ``mlflow server`` in the foreground (blocks until Ctrl+C)."""
     cmd = [
         sys.executable, "-m", "mlflow", "server",
         "--host", host,
@@ -406,6 +426,81 @@ def start_tracking_server(
     ]
     logger.info("Starting MLflow server: {}", " ".join(cmd))
     subprocess.run(cmd, check=True)
+
+
+def ensure_server_running(
+    host: str = DEFAULT_SERVER_HOST,
+    port: int = DEFAULT_SERVER_PORT,
+    backend_store_uri: str = DEFAULT_BACKEND_URI,
+    artifacts_destination: str = DEFAULT_ARTIFACTS_DIR,
+    readiness_timeout_s: float = 30.0,
+) -> str:
+    """Ensure an MLflow tracking server is live at ``host:port`` and return its URL.
+
+    If one is already listening, reuse it. Otherwise spawn ``mlflow server`` as a
+    detached background subprocess, wait for its ``/health`` endpoint, and return
+    the URL. The subprocess outlives this Python process so the dashboard stays
+    browsable after training finishes.
+    """
+    url = f"http://{host}:{port}"
+    if _is_server_up(url):
+        logger.info("MLflow server already running at {}", url)
+        return url
+
+    Path(artifacts_destination).mkdir(parents=True, exist_ok=True)
+    log_path = Path("mlflow_server.log")
+    log_file = log_path.open("ab")
+    cmd = [
+        sys.executable, "-m", "mlflow", "server",
+        "--host", host,
+        "--port", str(port),
+        "--backend-store-uri", backend_store_uri,
+        "--artifacts-destination", artifacts_destination,
+    ]
+    popen_kwargs: dict[str, Any] = {
+        "stdout": log_file,
+        "stderr": log_file,
+        "stdin": subprocess.DEVNULL,
+        "close_fds": True,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS  # type: ignore[attr-defined]
+        )
+    else:
+        popen_kwargs["start_new_session"] = True
+
+    logger.info("Starting MLflow server in background: {} (log: {})", url, log_path)
+    subprocess.Popen(cmd, **popen_kwargs)
+
+    deadline = time.monotonic() + readiness_timeout_s
+    while time.monotonic() < deadline:
+        if _is_server_up(url):
+            logger.info("MLflow server ready at {}", url)
+            return url
+        time.sleep(0.5)
+    raise RuntimeError(
+        f"MLflow server did not become ready at {url} within {readiness_timeout_s}s; "
+        f"see {log_path} for details"
+    )
+
+
+def run_tracked_pipeline(
+    data_path: str | None = None,
+    run_name: str | None = None,
+    register: bool = True,
+) -> dict:
+    """High-level entrypoint for ``main.py``.
+
+    Boots the dashboard if needed, points runs at it via ``MLFLOW_TRACKING_URI``,
+    and executes ``retrain``. The dashboard stays up after this returns.
+    """
+    url = ensure_server_running()
+    os.environ["MLFLOW_TRACKING_URI"] = url
+    logger.info("MLflow dashboard: {}", url)
+    print(f"MLflow dashboard: {url}")
+    cfg = TrackerConfig(tracking_uri=url)
+    return retrain(data_path=data_path, run_name=run_name, register=register, config=cfg)
 
 
 # -- CLI ---------------------------------------------------------------------
