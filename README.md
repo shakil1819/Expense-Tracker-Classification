@@ -4,14 +4,16 @@
 
 ---
 
-## What It Does
+## Deliverables
 
-Automatically classifies expense transactions to their correct accounting account using only the fields available at invoice time: item name, item description, vendor ID, and amount. No manual review. No hardcoded rules.
-
-The model handles the two hardest real-world conditions simultaneously:
-
-- **Class imbalance** - 103 account categories ranging from 1,179 records down to a single example
-- **Duplicate leakage** - Many expense lines share exact item names across train and test; evaluation is explicitly designed to prevent this from inflating scores
+| File | Description |
+|---|---|
+| `notebooks/expense_classification_report.ipynb` | End-to-end interactive report: EDA, feature engineering, training, evaluation, overfitting diagnosis |
+| `description.md` | Written description of approach, design decisions, results, and limitations |
+| `README.md` | This file - setup and run instructions |
+| `src/` | Python package: feature engineering, training, inference, MLflow tracker |
+| `artifacts/evaluation_summary.json` | Full metrics from the last pipeline run |
+| `artifacts/account_classifier.joblib` | Serialised trained model |
 
 ---
 
@@ -20,9 +22,9 @@ The model handles the two hardest real-world conditions simultaneously:
 | Evaluation Method | Accuracy | Macro F1 | Notes |
 |---|---|---|---|
 | Grouped holdout (80/20, item-name split) | **89.38%** | 76.4% | Primary metric - zero item-name leakage |
-| Repeated grouped (5×, averaged) | **87.46%** | - | Variance-stabilized estimate |
+| Repeated grouped (5x, averaged) | **87.46%** | - | Variance-stabilised estimate |
 | Random holdout (80/20) | 89.48% | 77.6% | Optimistic - included for reference only |
-| **Balanced unseen holdout** | **85.42%** | **82.5%** | Stress test: 3 unseen examples × 64 rare categories |
+| **Balanced unseen holdout** | **85.42%** | **82.5%** | Stress test: 3 unseen examples x 64 rare categories |
 | Baseline (vendor+item lookup) | 74.77% | - | Naive memorisation baseline |
 
 > The grouped holdout is the honest number. It simulates production: the model sees a new expense whose item name never appeared in training and must generalise from vendor, amount, and text patterns alone.
@@ -159,81 +161,126 @@ mlruns/                            # Local MLflow experiment store (file backend
 
 ---
 
-## Quickstart
+## Setup and Run Instructions
 
-**Requirements**: Python 3.14+, [uv](https://github.com/astral-sh/uv)
+### Requirements
 
+- Python 3.14+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) package manager
+
+### Install uv
+
+**Linux / macOS**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows (PowerShell)**
 ```powershell
-# Install dependencies
-uv sync
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
 
-# Train, evaluate, save the model, and open the MLflow dashboard
-. .\.venv\Scripts\Activate.ps1
+---
+
+### Install dependencies
+
+**Linux / macOS**
+```bash
+uv sync
+```
+
+**Windows**
+```powershell
+uv sync
+```
+
+_(same command - uv is cross-platform)_
+
+---
+
+### Train the model
+
+Runs the full pipeline: loads data, engineers features, tunes hyperparameters, evaluates, saves the model, and opens the MLflow dashboard at `http://127.0.0.1:5000`.
+
+**Linux / macOS**
+```bash
 uv run main.py
 ```
 
-`uv run main.py` auto-boots an MLflow tracking server at
-<http://127.0.0.1:5000> (if not already running) and records the run there.
-Use `uv run main.py --no-track` to skip MLflow entirely.
-
-Outputs written to:
-- `artifacts/evaluation_summary.json` - full metrics
-- `artifacts/account_classifier.joblib` - trained model
-- `.docs/03_results.md` - formatted results report
-- `data/<timestamp>/` - train/test CSV exports for each split
-- `mlflow.db` + `mlartifacts/` - MLflow backend + artifact store (tracked mode)
-
+**Windows**
 ```powershell
-# Run the test suite (27 tests)
+uv run main.py
+```
+
+**Without MLflow tracking** (no server needed):
+
+```bash
+# Linux / macOS
+uv run main.py --no-track
+
+# Windows
+uv run main.py --no-track
+```
+
+Outputs written after a run:
+
+| Path | Contents |
+|---|---|
+| `artifacts/evaluation_summary.json` | Full metrics JSON |
+| `artifacts/account_classifier.joblib` | Serialised trained model |
+| `.docs/03_results.md` | Auto-generated formatted results report |
+| `mlflow.db` + `mlartifacts/` | MLflow backend and artifact store |
+
+---
+
+### Run the test suite
+
+**Linux / macOS**
+```bash
+uv run pytest
+```
+
+**Windows**
+```powershell
 uv run pytest
 ```
 
 ---
 
-## MLflow Integration
+### Open the notebook
 
-One command does everything:
-
-```powershell
-. .\.venv\Scripts\Activate.ps1
-uv run main.py
+**Linux / macOS**
+```bash
+uv run jupyter notebook notebooks/expense_classification_report.ipynb
 ```
 
-This auto-boots the MLflow server (if not already running) at
-<http://127.0.0.1:5000>, points runs at it, and executes the tracked training
-pipeline. The dashboard stays up after training so you can browse results.
-
-Variants:
-
+**Windows**
 ```powershell
-uv run main.py --run-name my-experiment   # custom run name in the UI
-uv run main.py --no-track                 # skip MLflow, raw pipeline only
-uv run python -m src.tracker server       # foreground server only
-uv run python -m src.tracker retrain      # tracked run, server must already be up
+uv run jupyter notebook notebooks\expense_classification_report.ipynb
 ```
 
-One run populates the dashboard with:
+The notebook reads `artifacts/evaluation_summary.json` (produced by `uv run main.py`) and the MLflow query cell auto-detects a running server or falls back to the local file store.
 
-| Tab | Contents |
+---
+
+### MLflow commands
+
+| Command | What it does |
 |---|---|
-| **Overview** | run id, duration, tags (`project`, `trigger`, `git_commit`, `data_path`) |
-| **Parameters** | `best_C`, `best_class_weight`, `best_oversample_min_count`, `optimize_for`, dataset shape |
-| **Metrics** | baseline, random / grouped / grouped-tuned holdouts, balanced unseen, calibrated fallback (accuracy, macro F1, train-test gap) |
-| **Artifacts** | `metrics_card.json`, `evaluation_summary.json`, `dataset_validation.json`, `reports/03_results.md`, `model_joblib/account_classifier.joblib`, `model/` (MLmodel flavour, `conda.yaml`, `requirements.txt`, `python_env.yaml`) |
-| **Datasets** | input dataset with digest, schema, target column |
-| **Traces** | span for `run_training_pipeline` |
-| **Models** | new version under `peakflo-account-classifier`, aliased `champion` |
+| `uv run main.py` | Auto-start server + full tracked training run |
+| `uv run main.py --run-name my-run` | Same with a custom run name |
+| `uv run python -m src.tracker server` | Start MLflow server only (foreground) |
+| `uv run python -m src.tracker retrain` | Retrain with tracking (server must be running) |
 
-**Load the registered champion model** from Python:
+Dashboard URL: `http://127.0.0.1:5000`
+
+**Load the champion model from Python:**
 
 ```python
 from src.tracker import MLflowTracker
 model = MLflowTracker().load_model("champion")
-preds = model.predict(list_of_feature_dicts)
+predictions = model.predict(list_of_feature_dicts)
 ```
-
-Operator guide with dashboard walkthrough, troubleshooting, and comparison
-workflow: `.docs/05_mlflow.md`.
 
 ---
 
