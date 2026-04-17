@@ -27,3 +27,4 @@ AGENTS.md
 CLAUDE.md
 .docs/codes/
 *.log
+.ipynb_checkpoints/
