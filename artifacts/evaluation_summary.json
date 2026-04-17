@@ -56,7 +56,7 @@
     ]
   },
   "baseline": {
-    "item_vendor_lookup_accuracy": 0.7477017364657814
+    "item_vendor_lookup_accuracy": 0.7364657814096016
   },
   "hyperparameter_tuning": {
     "best_C": 2.0,
@@ -1930,9 +1930,9 @@
     "C": 1.0,
     "class_weight": "balanced",
     "oversample_min_count": 5,
-    "accuracy": 0.8768577494692145,
-    "weighted_f1": 0.8662244418575638,
-    "macro_f1": 0.7407430693128054
+    "accuracy": 0.8779193205944799,
+    "weighted_f1": 0.8675143264012574,
+    "macro_f1": 0.7411201802960674
   },
   "calibrated_fallback_balanced": {
     "strategy": "calibrated_fallback_balanced",

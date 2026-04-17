@@ -1,7 +1,7 @@
 # In-Depth Tutorial: Expense Account Classification Pipeline
 
 > A complete walkthrough of every design decision, data structure, algorithm, and validation
-> technique used in this codebase — from raw JSON to a calibrated production predictor.
+> technique used in this codebase - from raw JSON to a calibrated production predictor.
 
 ---
 
@@ -9,32 +9,32 @@
 
 1. [Problem Statement](#1-problem-statement)
 2. [Project Layout](#2-project-layout)
-3. [Data Layer — `ExpenseRecord` and Loading](#3-data-layer--expenserecord-and-loading)
+3. [Data Layer - `ExpenseRecord` and Loading](#3-data-layer--expenserecord-and-loading)
 4. [Text Normalisation and Feature Construction](#4-text-normalisation-and-feature-construction)
 5. [Custom Transformers](#5-custom-transformers)
    - 5.1 [DictTextVectorizer](#51-dicttextvectorizer)
    - 5.2 [DictOneHotEncoder](#52-dictonehhotencoder)
    - 5.3 [DictAmountScaler](#53-dictamountscaler)
    - 5.4 [DictAmountBinner](#54-dictamountbinner)
-6. [Feature Union — Putting It All Together](#6-feature-union--putting-it-all-together)
+6. [Feature Union - Putting It All Together](#6-feature-union--putting-it-all-together)
 7. [Why LinearSVC?](#7-why-linearsvc)
 8. [The Training Pipeline](#8-the-training-pipeline)
-   - 8.1 [records_to_examples — The Bridge](#81-records_to_examples--the-bridge)
-   - 8.2 [_fit_and_score — The Workhorse](#82-_fit_and_score--the-workhorse)
-   - 8.3 [build_classifier — Assembling the Pipeline](#83-build_classifier--assembling-the-pipeline)
-9. [Handling Class Imbalance — Minority Oversampling](#9-handling-class-imbalance--minority-oversampling)
-10. [Validation Strategy — Why Random Splits Lie](#10-validation-strategy--why-random-splits-lie)
+   - 8.1 [records_to_examples - The Bridge](#81-records_to_examples--the-bridge)
+   - 8.2 [_fit_and_score - The Workhorse](#82-_fit_and_score--the-workhorse)
+   - 8.3 [build_classifier - Assembling the Pipeline](#83-build_classifier--assembling-the-pipeline)
+9. [Handling Class Imbalance - Minority Oversampling](#9-handling-class-imbalance--minority-oversampling)
+10. [Validation Strategy - Why Random Splits Lie](#10-validation-strategy--why-random-splits-lie)
     - 10.1 [Random Holdout](#101-random-holdout)
     - 10.2 [Grouped Holdout](#102-grouped-holdout)
     - 10.3 [Balanced Unseen Holdout](#103-balanced-unseen-holdout)
     - 10.4 [Repeated Splits](#104-repeated-splits)
-11. [Hyperparameter Tuning — Grouped CV Grid Search](#11-hyperparameter-tuning--grouped-cv-grid-search)
-12. [Two-Stage Tuning — Balancing Natural and Rare-Class Accuracy](#12-two-stage-tuning--balancing-natural-and-rare-class-accuracy)
+11. [Hyperparameter Tuning - Grouped CV Grid Search](#11-hyperparameter-tuning--grouped-cv-grid-search)
+12. [Two-Stage Tuning - Balancing Natural and Rare-Class Accuracy](#12-two-stage-tuning--balancing-natural-and-rare-class-accuracy)
 13. [Overfitting Diagnostics](#13-overfitting-diagnostics)
     - 13.1 [Learning Curve](#131-learning-curve)
     - 13.2 [Validation Curve](#132-validation-curve)
     - 13.3 [Error Analysis by Class Frequency](#133-error-analysis-by-class-frequency)
-14. [Inference Pipeline — CalibratedPredictor](#14-inference-pipeline--calibratedpredictor)
+14. [Inference Pipeline - CalibratedPredictor](#14-inference-pipeline--calibratedpredictor)
     - 14.1 [Sigmoid Calibration](#141-sigmoid-calibration)
     - 14.2 [Vendor Fallback](#142-vendor-fallback)
 15. [Full Pipeline Orchestration](#15-full-pipeline-orchestration)
@@ -48,8 +48,8 @@
 
 ## 1. Problem Statement
 
-**Task**: Given an expense transaction record — vendor ID, item name, item description, and
-amount — predict the accounting `accountName` it should be filed under.
+**Task**: Given an expense transaction record - vendor ID, item name, item description, and
+amount - predict the accounting `accountName` it should be filed under.
 
 **Dataset**: 4,894 records, 337 unique vendors, 103 unique account names.
 
@@ -68,7 +68,7 @@ vendor identity, and weakly in transaction amount.
 
 **Targets**:
 - ≥ 85% overall accuracy (hard requirement)
-- ≥ 92% grouped holdout accuracy (bonus — internal algorithm benchmark)
+- ≥ 92% grouped holdout accuracy (bonus - internal algorithm benchmark)
 - ≥ 85% balanced unseen holdout accuracy (rare-class stress test)
 
 ---
@@ -77,7 +77,7 @@ vendor identity, and weakly in transaction amount.
 
 ```
 peakflo/
-├── accounts-bills.json          # Raw dataset — 4,894 records
+├── accounts-bills.json          # Raw dataset - 4,894 records
 ├── main.py                      # Entry point: calls src.training_pipeline.main()
 ├── pyproject.toml               # uv/pip package config, declares `peakflo` CLI script
 ├── src/
@@ -103,13 +103,13 @@ training_pipeline  ←→  inference_pipeline
       main.py / tests
 ```
 
-`feature_engineering_pipeline` has zero internal dependencies — it only uses sklearn and
+`feature_engineering_pipeline` has zero internal dependencies - it only uses sklearn and
 stdlib. `inference_pipeline` imports only `ExpenseRecord` helpers from feature engineering.
 `training_pipeline` coordinates both.
 
 ---
 
-## 3. Data Layer — `ExpenseRecord` and Loading
+## 3. Data Layer - `ExpenseRecord` and Loading
 
 ### The Raw JSON Shape
 
@@ -120,7 +120,7 @@ Each record in `accounts-bills.json` looks like:
   "_id": {"$oid": "abc123"},
   "vendorId": "v-0042",
   "itemName": "AWS EC2 Instance Monthly",
-  "itemDescription": "Cloud compute — Singapore region",
+  "itemDescription": "Cloud compute - Singapore region",
   "accountId": "acc-9901",
   "accountName": "611202 Online Subscription/Tool",
   "itemTotalAmount": 4821.50
@@ -142,20 +142,20 @@ class ExpenseRecord:
     amount_log: float          # math.log1p(abs(item_total_amount))
 ```
 
-`frozen=True` makes it immutable and hashable — critical because records are passed through
+`frozen=True` makes it immutable and hashable - critical because records are passed through
 multiple pipeline stages and we never want accidental mutation.
 
 Three computed fields are derived at load time, not stored in JSON:
 
-- **`normalized_item_name`** — lowercased, whitespace-collapsed. Used as the grouping key
+- **`normalized_item_name`** - lowercased, whitespace-collapsed. Used as the grouping key
   for all grouped CV splits. The core assumption: two records with identical
   `normalized_item_name` are likely the same recurring transaction pattern, so they must not
   appear in both train and test.
 
-- **`text`** — concatenation of `normalized_item_name` + `normalized_description`. This is
+- **`text`** - concatenation of `normalized_item_name` + `normalized_description`. This is
   the primary TF-IDF input.
 
-- **`amount_log`** — `log1p(|amount|)`. Log transform compresses the huge range
+- **`amount_log`** - `log1p(|amount|)`. Log transform compresses the huge range
   (-$15,195 to $161,838,000) into a scale where the model can learn linearly.
 
 ### `load_records`
@@ -218,7 +218,7 @@ degrades gracefully to just the item name.
 
 sklearn transformers must implement `fit(X, y)` and `transform(X)`. The standard sklearn
 transformers (TfidfVectorizer, OneHotEncoder) expect a 2-D array or a list of strings. Our
-`X` is a `list[dict]` — one dict per record. So we wrap each sklearn transformer in a
+`X` is a `list[dict]` - one dict per record. So we wrap each sklearn transformer in a
 "dict-aware" adapter that extracts the right key before delegating.
 
 All four adapters follow the same pattern:
@@ -248,13 +248,13 @@ instantiation covers three different vectorizer configs used in the feature unio
 
 | Instance | `key` | `analyzer` | `ngram_range` | `min_df` | Purpose |
 |---|---|---|---|---|---|
-| `word_tfidf` | `"text"` | word | (1,2) | 2 | dominant signal — full text bigrams |
+| `word_tfidf` | `"text"` | word | (1,2) | 2 | dominant signal - full text bigrams |
 | `item_name_tfidf` | `"normalized_item_name"` | word | (1,2) | 1 | dedicated item-name signal |
 | `char_tfidf` | `"text"` | char_wb | (3,5) | 1 | typo + partial-match robustness |
 
 **Why `sublinear_tf=True`**: Raw term frequency rewards documents that repeat a word 100×
 more than documents that mention it once. `sublinear_tf` replaces `tf` with `1 + log(tf)`,
-dampening this effect. For expense descriptions — often short, repetitive boilerplate — this
+dampening this effect. For expense descriptions - often short, repetitive boilerplate - this
 prevents any single repeated term from dominating.
 
 **Why `min_df=2` for word_tfidf but `min_df=1` for item_name_tfidf**: The full-text
@@ -291,7 +291,7 @@ class DictOneHotEncoder(BaseEstimator, TransformerMixin):
 337 vendors → 337 binary columns (sparse). Each row is exactly one 1-bit.
 
 **Why `handle_unknown="ignore"`**: At inference time, a new vendor not seen during training
-produces an all-zeros row — the model silently degrades to relying on text features alone.
+produces an all-zeros row - the model silently degrades to relying on text features alone.
 Without this, it would raise a `ValueError`.
 
 **Signal**: Vendors are often highly correlated with account categories. "Zoom" almost
@@ -309,7 +309,7 @@ class DictAmountScaler(BaseEstimator, TransformerMixin):
 
 `MaxAbsScaler` divides by the maximum absolute value, keeping the range `[-1, 1]`. Unlike
 `StandardScaler`, it does not center (shift mean to 0), preserving the sparsity of zero
-values — crucial because we concatenate this with sparse TF-IDF matrices.
+values - crucial because we concatenate this with sparse TF-IDF matrices.
 
 **Why log-scale before scaling**: The raw amount range spans 8+ orders of magnitude. Log
 compresses this to ~12 units (`log1p(161,838,000) ≈ 18.9`). The scaler then maps that to
@@ -353,11 +353,11 @@ give each bin roughly equal occupancy (10% of records per bin), maximising infor
 filled with `fillna(0.0)`). If 15% of records are exactly zero, multiple percentile edges
 land on the same value. `np.unique` deduplicates them, preventing zero-width bins that
 would cause `np.digitize` to behave incorrectly. The final number of bins may be fewer than
-`n_bins` — the test asserts `result.shape[1] <= 10`.
+`n_bins` - the test asserts `result.shape[1] <= 10`.
 
 ---
 
-## 6. Feature Union — Putting It All Together
+## 6. Feature Union - Putting It All Together
 
 ```python
 def build_feature_union() -> FeatureUnion:
@@ -381,7 +381,7 @@ their sparse output matrices. The result is one large sparse matrix per record:
 ```
 
 All outputs are sparse (`csr_matrix`). Memory for 4,894 records × 30,000 features at
-`float64` would be ~1.1 GB dense — but sparse representation stores only non-zero values,
+`float64` would be ~1.1 GB dense - but sparse representation stores only non-zero values,
 so actual memory is ~10-50 MB.
 
 **Why `strip_accents="unicode"`** on text vectorizers: Normalises accented characters
@@ -396,9 +396,9 @@ training samples. LinearSVC is the right tool because:
 
 | Property | Value for This Problem |
 |---|---|
-| **Speed** | `O(n * d)` per iteration via liblinear — fast on sparse matrices |
+| **Speed** | `O(n * d)` per iteration via liblinear - fast on sparse matrices |
 | **Accuracy** | Competitive with neural models on short-text classification when features are well-engineered |
-| **Interpretability** | Each class has a weight vector — `coef_[class_i, feature_j]` is the contribution of feature j to class i |
+| **Interpretability** | Each class has a weight vector - `coef_[class_i, feature_j]` is the contribution of feature j to class i |
 | **No kernel trick needed** | 30,000 features already provides rich non-linear representation via char n-grams |
 | **`dual="auto"`** | Liblinear selects primal or dual form based on n_samples vs n_features; avoids manual tuning |
 | **`class_weight`** | Built-in support for upweighting minority classes |
@@ -410,7 +410,7 @@ training samples. LinearSVC is the right tool because:
 - **Logistic Regression**: Similar accuracy to LinearSVC, slightly slower convergence on
   this scale.
 - **SVC (kernel='linear')**: Uses libsvm instead of liblinear. libsvm is `O(n²)` in the
-  number of support vectors — much slower for 4,000+ samples and sparse features. Testing
+  number of support vectors - much slower for 4,000+ samples and sparse features. Testing
   confirmed ~5% accuracy drop vs LinearSVC on this dataset.
 - **Transformer / SBERT**: Would require GPU and SBERT embeddings. Could improve rare-class
   performance but adds significant operational complexity for marginal gain on frequent
@@ -420,7 +420,7 @@ training samples. LinearSVC is the right tool because:
 
 ## 8. The Training Pipeline
 
-### 8.1 `records_to_examples` — The Bridge
+### 8.1 `records_to_examples` - The Bridge
 
 ```python
 def records_to_examples(
@@ -442,16 +442,16 @@ def records_to_examples(
 
 Returns three things:
 
-1. **`examples`** — `list[dict]` — the feature matrix input. Each dict has exactly the keys
+1. **`examples`** - `list[dict]` - the feature matrix input. Each dict has exactly the keys
    the transformers read from.
-2. **`labels`** — `np.ndarray` of strings — the target classes.
-3. **`groups`** — `np.ndarray` of strings — the grouping key for grouped CV splits. This is
+2. **`labels`** - `np.ndarray` of strings - the target classes.
+3. **`groups`** - `np.ndarray` of strings - the grouping key for grouped CV splits. This is
    `normalized_item_name`, meaning two records with the same item name get the same group.
 
 The `groups` array is the lynchpin of the entire validation strategy. Without it, you could
 not do `GroupShuffleSplit`.
 
-### 8.2 `_fit_and_score` — The Workhorse
+### 8.2 `_fit_and_score` - The Workhorse
 
 ```python
 def _fit_and_score(
@@ -475,13 +475,13 @@ def _fit_and_score(
 
 **Critical rule**: Oversampling is applied **only to `train_records`**, never to
 `test_records`. If oversampled records appeared in the test set, the model would be
-evaluated on its own synthetic duplicates — artificially inflated accuracy.
+evaluated on its own synthetic duplicates - artificially inflated accuracy.
 
-`_fit_and_score` is a **pure function** — it never mutates global state and returns a
+`_fit_and_score` is a **pure function** - it never mutates global state and returns a
 complete result dict. This makes it safe to call 250+ times inside `tune_hyperparameters_grouped_cv`
 without side effects.
 
-### 8.3 `build_classifier` — Assembling the Pipeline
+### 8.3 `build_classifier` - Assembling the Pipeline
 
 ```python
 def build_classifier(C=1.0, class_weight=None, max_iter=20000) -> Pipeline:
@@ -503,13 +503,13 @@ The sklearn `Pipeline` guarantees that:
 This prevents test-set information from leaking into the TF-IDF vocabulary or OHE
 categories. The vocabulary is fitted only on training data.
 
-`max_iter=20000` is high intentionally — liblinear terminates early when it converges, but
+`max_iter=20000` is high intentionally - liblinear terminates early when it converges, but
 with `class_weight='balanced'` and many classes, convergence can take longer than the
 default 1,000 iterations.
 
 ---
 
-## 9. Handling Class Imbalance — Minority Oversampling
+## 9. Handling Class Imbalance - Minority Oversampling
 
 ```python
 def resample_minority_classes(
@@ -534,7 +534,7 @@ def resample_minority_classes(
 
 **Example**:
 ```
-Class "627001 Bank Charges" — 3 records in training fold
+Class "627001 Bank Charges" - 3 records in training fold
 min_count = 5
 deficit = 5 - 3 = 2
 → randomly pick 2 existing records from the 3, append them
@@ -551,7 +551,7 @@ downsampled.
 | `resample_minority_classes` | Duplicate minority-class records | Reduces gradient starvation for rare classes |
 | `class_weight='balanced'` | `w_i = n_total / (n_classes * n_i)` | Multiplies loss contribution by inverse frequency |
 
-They are not redundant — they address different aspects:
+They are not redundant - they address different aspects:
 - Oversampling ensures the model *sees* rare-class examples more frequently per epoch
 - `class_weight` ensures that each rare-class *mistake* contributes more to the loss
 
@@ -560,7 +560,7 @@ both to find the optimal balance.
 
 ---
 
-## 10. Validation Strategy — Why Random Splits Lie
+## 10. Validation Strategy - Why Random Splits Lie
 
 ### 10.1 Random Holdout
 
@@ -571,7 +571,7 @@ splitter = ShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
 **The problem**: If a record with `normalized_item_name = "zoom monthly license"` appears
 in both train and test (because there are 20 such identical records and random split puts 16
 in train and 4 in test), the model has effectively *memorised* this pattern during training.
-The test accuracy for these records is near 100% — but it tells you nothing about how the
+The test accuracy for these records is near 100% - but it tells you nothing about how the
 model performs on a **genuinely unseen** item name.
 
 **Observed gap**: Random holdout accuracy ≈ **0.95+** vs grouped holdout ≈ **0.89**. That
@@ -588,7 +588,7 @@ train_idx, test_idx = next(splitter.split(indices, labels, groups=groups))
 ```
 
 `GroupShuffleSplit` ensures that **all records with the same `normalized_item_name` are
-assigned to the same split** — either all train or all test, never both.
+assigned to the same split** - either all train or all test, never both.
 
 **Result**: The test set contains only item-name patterns the model has never seen. This
 mimics the real production scenario where a new invoice arrives for an item the system
@@ -596,7 +596,7 @@ hasn't processed before.
 
 **Trade-off**: GroupShuffleSplit does not preserve class ratios. A class with only 2
 unique item names might land entirely in test or entirely in train. This makes grouped
-holdout accuracy noisier — hence the need for repeated splits.
+holdout accuracy noisier - hence the need for repeated splits.
 
 ### 10.3 Balanced Unseen Holdout
 
@@ -626,10 +626,10 @@ Excluding the whole group means the model must generalise from *different* item 
 patterns for the same account.
 
 **Why `min_train_size=5`**: A class with only 4 records total cannot afford to give 3 to
-test and have only 1 for training — that would make the training fold too sparse to learn
+test and have only 1 for training - that would make the training fold too sparse to learn
 anything. The threshold ensures test classes have enough training support.
 
-The resulting test set has **exactly 3 records per eligible class** — balanced by
+The resulting test set has **exactly 3 records per eligible class** - balanced by
 construction. Standard grouped holdout is dominated by frequent classes. This holdout
 amplifies signal from rare classes equally.
 
@@ -644,16 +644,16 @@ def evaluate_repeated_splits(records, strategy, n_splits=5, ...):
     return {"accuracy_mean": ..., "accuracy_std": ...}
 ```
 
-A single holdout split has variance — the random partitioning might happen to put easy
+A single holdout split has variance - the random partitioning might happen to put easy
 classes in test (optimistic) or hard classes in test (pessimistic). Running 5 independent
 splits and averaging gives a more stable estimate.
 
-**Typical output**: `accuracy_mean=0.8817 ± 0.0091` — the ±0.009 uncertainty band tells
+**Typical output**: `accuracy_mean=0.8817 ± 0.0091` - the ±0.009 uncertainty band tells
 you how much to trust a single run's number.
 
 ---
 
-## 11. Hyperparameter Tuning — Grouped CV Grid Search
+## 11. Hyperparameter Tuning - Grouped CV Grid Search
 
 ```python
 def tune_hyperparameters_grouped_cv(
@@ -682,11 +682,11 @@ for omc in oversample_min_count_values:
 ```
 
 All 5 folds are pre-generated from a single `GroupShuffleSplit` call. This ensures the
-same fold structure across all configs — an "apple to apple" comparison.
+same fold structure across all configs - an "apple to apple" comparison.
 
 **`optimize_for`**: Defaults to `"macro_f1"`, not `"accuracy"`. Macro F1 is the
 unweighted average of per-class F1 scores. On an imbalanced dataset, accuracy is dominated
-by frequent classes — a model that predicts "611202 Online Subscription/Tool" for everything
+by frequent classes - a model that predicts "611202 Online Subscription/Tool" for everything
 achieves ~24% accuracy without learning anything. Macro F1 forces the model to do reasonably
 well on all classes.
 
@@ -697,14 +697,14 @@ well on all classes.
 
 Why? `class_weight='balanced'` upweights rare classes, which hurts accuracy on frequent
 classes (which dominate validation data in natural distribution). But it improves
-generalisation on rare classes — which is exactly what the balanced holdout measures.
+generalisation on rare classes - which is exactly what the balanced holdout measures.
 
 This means: **you cannot use grouped CV macro F1 ranking alone to find the best model for
 rare-class performance**. That's why the two-stage tuning exists.
 
 ---
 
-## 12. Two-Stage Tuning — Balancing Natural and Rare-Class Accuracy
+## 12. Two-Stage Tuning - Balancing Natural and Rare-Class Accuracy
 
 ```python
 def tune_for_balanced_unseen(records, min_grouped_accuracy=0.85) -> dict:
@@ -722,17 +722,17 @@ def tune_for_balanced_unseen(records, min_grouped_accuracy=0.85) -> dict:
     return {"grouped_cv": grouped_result, "balanced_refinement": best_balanced}
 ```
 
-**Stage 1 — Production Viability Gate**:
+**Stage 1 - Production Viability Gate**:
 
 The `min_grouped_accuracy=0.85` floor ensures we only consider models that pass the minimum
 business requirement on the natural distribution. Models that sacrifice too much accuracy on
 common classes (to serve rare classes) are eliminated here.
 
-**Stage 2 — Rare-Class Optimisation**:
+**Stage 2 - Rare-Class Optimisation**:
 
 Among all configs that passed the gate, we evaluate each on the balanced unseen holdout and
 select the one with the highest **balanced macro F1**. The balanced holdout gives equal
-weight to all eligible classes — a poor rare-class score cannot be masked by excellent
+weight to all eligible classes - a poor rare-class score cannot be masked by excellent
 frequent-class performance.
 
 **Decision flow**:
@@ -779,7 +779,7 @@ Train accuracy:  0.99 | 0.99 | 0.99 | 0.99 | 0.99   (always near-perfect on seen
 Val accuracy:    0.59 | 0.72 | 0.79 | 0.85 | 0.89   (improves with more data)
 ```
 
-**Interpretation**: The gap is NOT primarily caused by overfitting to specific words — it is
+**Interpretation**: The gap is NOT primarily caused by overfitting to specific words - it is
 caused by **insufficient data per class**. Average 47 samples across 103 classes. The
 learning curve is still rising at 100% of data, meaning *more data* would help more than
 further regularisation.
@@ -801,12 +801,12 @@ train_curve, validation_curve_scores = validation_curve(
 
 **What it shows**: How train and validation accuracy change as `C` varies.
 
-**`C` in LinearSVC**: Controls the regularisation strength — smaller `C` → more
+**`C` in LinearSVC**: Controls the regularisation strength - smaller `C` → more
 regularisation → simpler decision boundary. Larger `C` → less regularisation → decision
 boundary fits training data more tightly.
 
 **Expected pattern**:
-- At `C=0.1`: both train and val low (underfitting — too much regularisation)
+- At `C=0.1`: both train and val low (underfitting - too much regularisation)
 - At `C=1.0`–`C=4.0`: val peaks, train still high (sweet spot)
 - At `C=16.0`: train even higher, val drops slightly (overfitting)
 
@@ -840,14 +840,14 @@ This breaks down accuracy by how many training examples each class had.
 
 **Key insight**: Errors concentrate in rare classes, not frequent ones. This confirms the
 problem is **data scarcity** (34 labels with fewer than 5 examples), not model architecture.
-Improving the model architecture will not help singleton classes — they need more labelled
+Improving the model architecture will not help singleton classes - they need more labelled
 data.
 
 ---
 
-## 14. Inference Pipeline — CalibratedPredictor
+## 14. Inference Pipeline - CalibratedPredictor
 
-Raw `LinearSVC` does not produce probabilities — it only produces signed distances from the
+Raw `LinearSVC` does not produce probabilities - it only produces signed distances from the
 decision hyperplane. We need probabilities to implement the confidence threshold fallback.
 
 ### 14.1 Sigmoid Calibration
@@ -868,7 +868,7 @@ trained SVC's decision scores. It learns a sigmoid transformation `P(y|x) = σ(a
 where `f(x)` is the SVC's score and `a`, `b` are fitted parameters.
 
 **`FrozenEstimator`** wraps the already-fitted pipeline and prevents `CalibratedClassifierCV`
-from re-fitting it — it only fits the sigmoid layer on top. Without `FrozenEstimator`,
+from re-fitting it - it only fits the sigmoid layer on top. Without `FrozenEstimator`,
 `CalibratedClassifierCV` would re-fit the entire pipeline from scratch using
 cross-validation, which would be redundant and slow.
 
@@ -939,15 +939,15 @@ the generic text, but the vendor lookup provides a reliable signal.
    └─ evaluate each eligible config on balanced unseen holdout
          ↓ selected: best_C, best_cw, best_omc
 3. Evaluate with selected params:
-   ├─ evaluate_holdout(random)           — optimistic baseline
-   ├─ evaluate_holdout(group_item)       — default params grouped
-   ├─ evaluate_holdout(group_item_tuned) — tuned params grouped ← primary metric
-   ├─ evaluate_repeated_splits(×3)       — stability estimates
-   ├─ evaluate_balanced_holdout          — rare-class stress test
-   ├─ evaluate_repeated_balanced_holdout — repeated rare-class
-   ├─ compute_overfitting_diagnostics    — learning + validation curves
-   ├─ evaluate_calibrated_fallback       — calibrated model + vendor fallback, grouped
-   └─ evaluate_calibrated_fallback_balanced — calibrated, balanced holdout
+   ├─ evaluate_holdout(random)           - optimistic baseline
+   ├─ evaluate_holdout(group_item)       - default params grouped
+   ├─ evaluate_holdout(group_item_tuned) - tuned params grouped ← primary metric
+   ├─ evaluate_repeated_splits(×3)       - stability estimates
+   ├─ evaluate_balanced_holdout          - rare-class stress test
+   ├─ evaluate_repeated_balanced_holdout - repeated rare-class
+   ├─ compute_overfitting_diagnostics    - learning + validation curves
+   ├─ evaluate_calibrated_fallback       - calibrated model + vendor fallback, grouped
+   └─ evaluate_calibrated_fallback_balanced - calibrated, balanced holdout
          ↓
 4. fit_full_model(all records, best_C, best_cw, best_omc)
          ↓
@@ -961,7 +961,7 @@ the generic text, but the vendor lookup provides a reliable signal.
 ```
 
 **Why fit the full model on ALL records?** After tuning, we know the best hyperparameters.
-The holdout splits were used for evaluation only — in production, every labelled record is
+The holdout splits were used for evaluation only - in production, every labelled record is
 valuable training signal. Fitting on 100% of data gives the deployed model the maximum
 generalisation capability.
 
@@ -969,7 +969,7 @@ generalisation capability.
 
 ## 16. Test Suite Design
 
-The tests in `tests/test_model.py` are **integration tests** — they load the real dataset
+The tests in `tests/test_model.py` are **integration tests** - they load the real dataset
 and run real model fits. This means they are slow (~2–5 minutes each) but they catch real
 regressions in model quality, not just code syntax errors.
 
@@ -1006,7 +1006,7 @@ uv run pytest tests/ -v --tb=short  # verbose
 try:
     from sklearnex import patch_sklearn, config_context as _sklearnex_config_context
     patch_sklearn()
-    logger.info("sklearnex patch applied — Intel GPU/CPU acceleration enabled")
+    logger.info("sklearnex patch applied - Intel GPU/CPU acceleration enabled")
     _SKLEARNEX_AVAILABLE = True
 except ImportError:
     from contextlib import nullcontext as _sklearnex_config_context
@@ -1025,7 +1025,7 @@ accurate.
 
 **Fallback**: `contextlib.nullcontext` is a do-nothing context manager. If `sklearnex` is
 not installed, the code runs normally with standard sklearn. The `try/except ImportError`
-makes acceleration optional — no hard dependency.
+makes acceleration optional - no hard dependency.
 
 **Verification** (check if acceleration is active):
 
@@ -1105,15 +1105,15 @@ build_feature_union()  [fitted on TRAIN only]
 | `LinearSVC` | `SVC(kernel='linear')`, LightGBM, SBERT | Fastest + best accuracy on sparse text with 30k features |
 | Grouped CV by `normalized_item_name` | Random CV, StratifiedKFold | Prevents same-text leakage; mimics real production use case |
 | Balanced unseen holdout | Standard grouped CV alone | Exposes rare-class generalisation that natural distribution masks |
-| Two-stage tuning | Single-objective CV | `class_weight='balanced'` hurts CV macro F1 but helps rare classes — conflicting objectives require two stages |
+| Two-stage tuning | Single-objective CV | `class_weight='balanced'` hurts CV macro F1 but helps rare classes - conflicting objectives require two stages |
 | `log1p(abs(amount))` | Raw amount, MinMaxScaler | Compresses 8 orders of magnitude; `abs` handles negative credits |
-| `MaxAbsScaler` (not `StandardScaler`) | StandardScaler | Preserves sparsity — centering would densify the sparse matrix |
+| `MaxAbsScaler` (not `StandardScaler`) | StandardScaler | Preserves sparsity - centering would densify the sparse matrix |
 | Quantile bins for amount | Equal-width bins | Equal occupancy per bin; robust to outliers |
 | Sigmoid calibration | Isotonic calibration | Fewer parameters (2 per class), standard for SVMs, less overfitting |
 | Vendor majority vote fallback | No fallback | When model is uncertain, vendor identity is a reliable prior |
 | `FrozenEstimator` wrapper | Re-fitting in calibration | Prevents double-fit; calibration only adds the sigmoid layer |
 | `min_df=1` for item_name TF-IDF | `min_df=2` | Rare item names are the most discriminative signal for rare classes |
-| `handle_unknown="ignore"` in OHE | Raise on unknown | Production robustness — new vendors don't crash the system |
+| `handle_unknown="ignore"` in OHE | Raise on unknown | Production robustness - new vendors don't crash the system |
 
 ---
 
@@ -1143,9 +1143,9 @@ uv run peakflo run
 ```
 
 Output files:
-- `artifacts/account_classifier.joblib` — serialised fitted Pipeline
-- `artifacts/evaluation_summary.json` — all metrics as structured JSON
-- `.docs/03_results.md` — human-readable results report
+- `artifacts/account_classifier.joblib` - serialised fitted Pipeline
+- `artifacts/evaluation_summary.json` - all metrics as structured JSON
+- `.docs/03_results.md` - human-readable results report
 
 ### Run Tests
 
@@ -1165,7 +1165,7 @@ new_invoices = [
     {
         "vendorId": "v-0042",
         "itemName": "AWS EC2 Monthly",
-        "itemDescription": "Compute — Singapore",
+        "itemDescription": "Compute - Singapore",
         "itemTotalAmount": 4821.50,
     }
 ]
@@ -1206,5 +1206,5 @@ print(raw_prediction)  # ["611202 Online Subscription/Tool"]
 ---
 
 *End of tutorial. Every function, class, and design choice described here maps directly to
-source code in `src/` — the tutorial and the code are the same artefact, just in different
+source code in `src/` - the tutorial and the code are the same artefact, just in different
 registers.*
