@@ -3,6 +3,7 @@
 **89.4% grouped holdout accuracy on 103 account categories - 14.6 points above the naive vendor-lookup baseline - with a validated rare-class benchmark showing 85.4% accuracy across 64 minority categories.**
 
 ---
+<img width="1900" height="904" alt="image" src="https://github.com/user-attachments/assets/88963e24-27b5-4a16-a5ec-893b3fc915cf" />
 
 ## Deliverables
 
