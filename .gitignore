@@ -26,3 +26,4 @@ quick_eval*.py
 AGENTS.md
 CLAUDE.md
 .docs/codes/
+*.log
