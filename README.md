@@ -187,25 +187,38 @@ uv run pytest
 
 ## MLflow Integration
 
-`src/tracker.py` wraps the training pipeline with MLflow 3.x: experiment
-tracking, dataset validation and versioning, a metric card view, tracing, and a
-model registry with a `champion` alias.
+Two commands, one dashboard.
 
-**One-click retrain** (runs the full pipeline under a fresh MLflow run, logs
-params / metrics / dataset / artifacts / model, and promotes the new version to
-`champion`):
+**Terminal A - start the UI** (keep running):
 
 ```powershell
-uv run python -m src.tracker retrain
-```
-
-**Local tracking server** (SQLite backend, browsable UI at <http://127.0.0.1:5000>):
-
-```powershell
+. .\.venv\Scripts\Activate.ps1
 uv run python -m src.tracker server --backend-store-uri "sqlite:///mlflow.db" --artifacts-destination ".\mlartifacts"
 ```
 
-**Load the registered champion model**:
+Open <http://127.0.0.1:5000>.
+
+**Terminal B - run a tracked training** (point at the server, then retrain):
+
+```powershell
+. .\.venv\Scripts\Activate.ps1
+$env:MLFLOW_TRACKING_URI = "http://127.0.0.1:5000"
+uv run python -m src.tracker retrain
+```
+
+One retrain run populates the dashboard with:
+
+| Tab | Contents |
+|---|---|
+| **Overview** | run id, duration, tags (`project`, `trigger`, `git_commit`, `data_path`) |
+| **Parameters** | `best_C`, `best_class_weight`, `best_oversample_min_count`, `optimize_for`, dataset shape |
+| **Metrics** | baseline, random / grouped / grouped-tuned holdouts, balanced unseen, calibrated fallback (accuracy, macro F1, train-test gap) |
+| **Artifacts** | `metrics_card.json`, `evaluation_summary.json`, `dataset_validation.json`, `reports/03_results.md`, `model_joblib/account_classifier.joblib`, `model/` (MLmodel flavour, `conda.yaml`, `requirements.txt`, `python_env.yaml`) |
+| **Datasets** | input dataset with digest, schema, target column |
+| **Traces** | span for `run_training_pipeline` |
+| **Models** | new version under `peakflo-account-classifier`, aliased `champion` |
+
+**Load the registered champion model** from Python:
 
 ```python
 from src.tracker import MLflowTracker
@@ -213,17 +226,8 @@ model = MLflowTracker().load_model("champion")
 preds = model.predict(list_of_feature_dicts)
 ```
 
-Full guide: `.docs/05_mlflow.md`.
-
-What gets logged per run:
-
-- **Params**: best `C`, `class_weight`, `oversample_min_count`, dataset shape
-- **Metrics**: baseline lookup, random / grouped / grouped-tuned holdout, balanced unseen, calibrated fallback (accuracy + macro F1 + train-test gap)
-- **Metric card**: tabular comparison renderable in the MLflow UI
-- **Dataset**: schema-validated `mlflow.data.PandasDataset` with row count and null counts
-- **Artifacts**: `evaluation_summary.json`, `.docs/03_results.md`, `account_classifier.joblib`
-- **Model**: registered as `peakflo-account-classifier`, aliased `champion`
-- **Trace**: `run_training_pipeline` wrapped in an `mlflow.trace` span
+Operator guide with dashboard walkthrough, troubleshooting, and comparison
+workflow: `.docs/05_mlflow.md`.
 
 ---
 
