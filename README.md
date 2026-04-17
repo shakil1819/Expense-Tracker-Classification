@@ -162,7 +162,11 @@ mlruns/                            # Local MLflow experiment store (file backend
 ---
 
 ## Setup and Run Instructions
-![start](.docs\start.gif)
+
+
+https://github.com/user-attachments/assets/4e3e777b-f739-4a9f-b67c-63d5e60c158a
+
+
 ### Requirements
 
 - Python 3.14+
