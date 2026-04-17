@@ -1,165 +1,231 @@
 # Expense Account Classification - Written Description
 
-## TL;DR
+## Executive Summary
 
-- **103-class expense classifier built and shipped end-to-end** - from raw JSON transactions to a production-ready `joblib` artifact with a calibrated predict API, MLflow tracking, and a one-command retrain loop.
-- **90.1% grouped holdout accuracy / 85.2% balanced accuracy** (tuned `LinearSVC`, C=4.0) on two complementary stress tests: grouped holdout holds out entire `itemName` groups to prevent phrase-level leakage (production proxy), while balanced accuracy caps each label at 3 test samples to stress-test rare-class coverage equally regardless of frequency.
-- **Train-val gap closed from 10.0% to 9.0%** via 5-fold `GroupShuffleSplit` hyperparameter tuning over 16 grid points (C x class_weight), with the root cause of residual overfitting quantified: 34 of 103 labels have fewer than 5 training examples, making some gap irreducible without more data.
-- **Frequency-stratified error analysis** reveals the model excels where it matters most - 92.3% accuracy on medium-frequency classes (20-99 examples) and 90.9% on high-frequency classes (100+ examples) - with rare-class degradation fully explained and isolated.
-- **Full reproducibility and observability** - every run logs metrics, parameters, and artifacts to MLflow with automatic model registration; the notebook renders a structured classification report, learning curves, and validation curves in a single `uv run main.py` call.
+This project builds a multiclass expense-account classifier that predicts `accountName` from `vendorId`, `itemName`, `itemDescription`, and `itemTotalAmount`. The core solution is a sparse feature pipeline combining word-level TF-IDF, character n-grams, vendor one-hot features, and amount-based numeric features, trained with `LinearSVC`. The main challenge was not simply achieving high accuracy, but doing so under a realistic validation strategy that avoids leakage from repeated item-name patterns. Using grouped evaluation on normalised `itemName`, the final model achieved **89.38% grouped holdout accuracy**, exceeding the assignment threshold of 85%, and outperformed a naive vendor-plus-item lookup baseline by **14.6 percentage points**. A separate balanced unseen benchmark reached **85.42% accuracy** and **82.5% macro F1**, showing that the model remains effective even when rare classes are evaluated more fairly.
 
 ---
 
-## 1. Problem Statement
+## Data Analysis
 
-Given a dataset of expense line items with fields `vendorId`, `itemName`, `itemDescription`, and `itemTotalAmount`, predict the correct `accountName` (103 categories) for each transaction.
+### Dataset Overview
 
-This is a **multiclass text classification** problem with two structural challenges that must be handled explicitly:
+The dataset contains **4,894 expense records** from a Singapore operation, spanning **337 vendors** and **103 account-name categories**. The target distribution is highly uneven: the largest class contains 1,179 records, while multiple labels appear only once. This immediately frames the task as an imbalanced multiclass classification problem rather than a standard balanced text-classification benchmark.
 
-- **Severe class imbalance** - label frequencies range from 1,179 to a single example
-- **Duplicate leakage** - many transactions share identical `itemName` strings; a naive random train/test split leaks phrase patterns and inflates reported accuracy
+The available predictive fields are:
+
+- `vendorId`
+- `itemName`
+- `itemDescription`
+- `itemTotalAmount`
+
+These fields are well-suited for a practical accounting classifier because they capture three distinct signals:
+
+- **textual meaning** from item names and descriptions
+- **vendor-specific priors** from recurring suppliers
+- **numerical context** from transaction amount
+
+### Exploratory Findings
+
+The first major finding was that `itemName` carries very strong signal. Many transactions reuse near-identical or identical item names, which means a random row split can accidentally place the same phrase pattern in both training and test data. In this setting, a model can appear stronger than it truly is by memorising recurring text templates.
+
+The second major finding was severe target imbalance. The distribution is long-tailed:
+
+- **16 labels are singletons**
+- **34 labels have fewer than 5 examples**
+- **43 labels have fewer than 10 examples**
+
+This matters because overall accuracy can still look strong even if minority categories are handled poorly. It also limits which validation strategies are feasible, since some labels do not have enough support to appear robustly across many grouped folds.
+
+The third finding was that vendor identity is highly informative. Some vendors are strongly associated with one or a few account categories, making `vendorId` a useful structured feature. However, relying on vendor alone is not sufficient, because the same vendor can map to different accounts depending on the expense text and amount.
+
+Finally, the `itemTotalAmount` field has a very wide range, from negative values up to very large positive amounts. That makes raw numeric use unstable, so amount had to be transformed before modeling.
+
+### Data Quality Observations
+
+The dataset was relatively clean, but a few data-quality issues still influenced the design:
+
+- Some descriptions were missing or empty, so the pipeline had to remain robust when `itemDescription` contributed little or no information.
+- Text formatting was inconsistent, including abbreviations, partial dates, punctuation variation, and mixed casing.
+- Repeated item-name templates introduced leakage risk under naive splitting.
+- Rare classes created evaluation instability and reduced the reliability of per-class estimates.
+
+These observations directly shaped the feature engineering and validation strategy. In particular, text normalization, character n-grams, and grouped splitting were all responses to issues discovered during initial analysis.
+
+### Key Insights That Informed Modeling
+
+The exploratory phase suggested four practical modeling decisions:
+
+1. **Use a sparse linear text model** rather than a heavier deep model, because the dataset is modest in size and strongly text-driven.
+2. **Combine structured and unstructured features**, since vendor and amount add signal that text alone does not capture.
+3. **Evaluate with grouped splits**, because row-level random splitting would overstate real-world performance.
+4. **Measure rare-class behavior separately**, because overall accuracy alone would hide the long-tail difficulty.
 
 ---
 
-## 2. Approach
+## Methodology
 
-### 2.1 Feature Engineering
+### Algorithm Choice and Rationale
 
-Six sparse feature sources are horizontally concatenated via `sklearn.pipeline.FeatureUnion`:
+The final classifier is **`LinearSVC`** inside a scikit-learn pipeline. This choice was intentional.
 
-| Feature | Transformer | Rationale |
+For this problem, the input representation is high-dimensional and sparse due to TF-IDF features. Linear SVMs are a strong baseline for exactly this setting: they train efficiently, handle sparse matrices well, and often outperform more complex models when the dataset is relatively small but text-rich. They are also easier to interpret and tune than transformer-based models in a short take-home setting.
+
+I did not choose a transformer model because the dataset has only 4,894 rows spread across 103 classes, with many labels having very few examples. A transformer would add much higher complexity and overfitting risk without clear evidence of better generalization under the grouped split that matters most.
+
+### Feature Engineering Approach
+
+The feature engineering pipeline combines six sparse feature blocks using `sklearn.pipeline.FeatureUnion`:
+
+| Feature | Transformer | Purpose |
 |---|---|---|
-| `itemName` + `itemDescription` (word 1-2gram) | TF-IDF, min_df=2, sublinear_tf | Primary text signal; sublinear dampens high-frequency terms |
-| `itemName` only (word 1-2gram) | TF-IDF, min_df=1, sublinear_tf | Dedicated rare-item signal not diluted by description |
-| Combined text (char 3-5gram, char_wb) | TF-IDF, min_df=1, sublinear_tf | Robustness against typos, abbreviations, mixed casing |
-| `vendorId` | One-hot (337 categories) | Encodes vendor-to-account prior; strong baseline signal |
-| `itemTotalAmount` | log(1 + abs) + MaxAbsScaler | Preserves sparsity; injects numeric range without dominating text |
-| `itemTotalAmount` | Quantile bins (10 deciles), one-hot | Non-linear amount bucket patterns |
+| `itemName` + `itemDescription` | Word TF-IDF, 1-2 grams, `min_df=2`, `sublinear_tf=True` | Main semantic text signal |
+| `itemName` only | Word TF-IDF, 1-2 grams, `min_df=1`, `sublinear_tf=True` | Preserves short rare-item patterns |
+| Combined text | Character TF-IDF, 3-5 grams, `char_wb` | Handles abbreviations, typos, formatting variation |
+| `vendorId` | One-hot encoding | Captures vendor-account prior |
+| `itemTotalAmount` | `log(1 + abs(amount))` + `MaxAbsScaler` | Stabilises large numeric range |
+| `itemTotalAmount` | Quantile-bin one-hot encoding | Captures non-linear amount effects |
 
-All transformers operate on Python dicts (`list[dict]`), making the pipeline directly callable from raw JSON records without a DataFrame dependency at inference time.
+This design balances practicality and performance. Word n-grams capture human-readable meaning, character n-grams improve robustness to noisy expense text, vendor identity supplies business prior information, and amount features help distinguish categories with similar text but different transaction sizes.
 
-### 2.2 Model
+Another important implementation detail is that the pipeline operates directly on Python dictionaries rather than requiring a DataFrame at inference time. This makes deployment cleaner because the saved artifact can consume raw JSON-like records directly.
 
-**LinearSVC** (liblinear backend) is the classifier. Justification:
+### Handling Class Imbalance
 
-- Optimal for high-dimensional sparse text features; scale-invariant to TF-IDF magnitude
-- Training time linear in the number of non-zero features - fast enough for repeated grouped cross-validation
-- Interpretable: per-class weight vectors show which n-grams drive each account label
-- Strong empirical baseline for medium-sized sparse multiclass problems
+Class imbalance was one of the most important technical constraints in the project. I addressed it in three ways:
 
-### 2.3 Validation Strategy
+1. **Class-aware tuning**: models with and without `class_weight='balanced'` were both considered.
+2. **Oversampling minority classes in training folds**: rare classes were duplicated up to a minimum support threshold during model selection.
+3. **Separate rare-class evaluation**: a balanced unseen benchmark was used so long-tail performance could be measured explicitly.
 
-Three complementary evaluation methods are used, each answering a different question:
+The final selected production configuration was:
 
-| Method | What it measures | Bias |
+- `C=1.0`
+- `class_weight='balanced'`
+- `oversample_min_count=5`
+
+This setting gave the best balance between strong grouped performance and improved minority-class behavior.
+
+### Validation Strategy
+
+Validation strategy was a central part of the methodology because naive validation would have been misleading. I used three complementary evaluation views:
+
+| Method | Purpose | Main Interpretation |
 |---|---|---|
-| **Random holdout** (80/20 row split) | Upper-bound estimate | Optimistic - item-name leakage present |
-| **Grouped holdout** (`GroupShuffleSplit` on normalised `itemName`) | Production-like generalisation | Honest - zero item-name overlap |
-| **Balanced unseen holdout** (3 samples x 64 eligible classes) | Rare-class robustness | Conservative - class-balanced, all items unseen |
+| Random holdout | Optimistic reference | Useful as a ceiling, but leakage-prone |
+| Grouped holdout on normalised `itemName` | Primary business metric | Best proxy for unseen transaction patterns |
+| Balanced unseen holdout | Rare-class stress test | More equal view of minority-class performance |
 
-The grouped holdout is the **primary metric**. It simulates the production scenario: a new transaction arrives whose item name pattern was never seen in training.
+The **grouped holdout** is the main metric because it prevents the same normalized item-name pattern from appearing in both training and test. That makes it a more realistic estimate of production performance.
 
-Repeated grouped evaluation (5 independent splits) provides a variance-stabilised estimate and a standard deviation.
+To reduce sensitivity to a single split, I also ran **repeated grouped evaluation across 5 independent splits**, producing a variance-stabilised mean estimate.
 
-### 2.4 Hyperparameter Tuning
+### Hyperparameter Selection
 
-Two-stage tuning is used because `class_weight='balanced'` is anti-correlated with grouped CV macro F1 but optimal for rare-class balanced accuracy. A single-objective grid search would miss the Pareto front.
+Hyperparameter tuning was done in two stages.
 
-**Stage 1 - Grouped 5-fold CV grid** over 50 configurations:
+**Stage 1:** grouped 5-fold cross-validation over a grid of 50 configurations varying:
 
-- `C`: [0.5, 1.0, 2.0, 4.0, 8.0]
-- `class_weight`: [None, 'balanced']
-- `oversample_min_count`: [0, 5, 10]
+- `C` in `[0.5, 1.0, 2.0, 4.0, 8.0]`
+- `class_weight` in `[None, 'balanced']`
+- `oversample_min_count` in `[0, 5, 10]`
 
-Only configurations with grouped accuracy >= 0.85 are eligible for Stage 2.
+Only configurations achieving at least **0.85 grouped accuracy** were promoted.
 
-**Stage 2 - Balanced unseen holdout** re-evaluates all Stage 1 eligible configs on the class-balanced held-out set. Best config is selected by **balanced macro F1**.
+**Stage 2:** all eligible configurations were re-evaluated on the balanced unseen holdout, and the final choice was made using **balanced macro F1**.
 
-**Selected params**: `C=1.0`, `class_weight='balanced'`, `oversample_min_count=5`
-
-### 2.5 Inference
-
-A `CalibratedPredictor` wraps the trained LinearSVC:
-
-- Sigmoid calibration converts raw SVC decision scores to confidence probabilities
-- Predictions with confidence below a configurable threshold fall back to the **vendor-majority account** (the most frequent account for that vendor in training data)
-- This fallback recovers accuracy on rare-label or out-of-distribution transactions where the model is genuinely uncertain
+This two-stage design was important because the best configuration for overall grouped accuracy is not always the best configuration for rare-class fairness.
 
 ---
 
-## 3. Results
+## Results
+
+### Overall Performance
+
+The final model exceeded the assignment target and performed strongly under multiple evaluation views.
 
 | Evaluation Method | Accuracy | Macro F1 | Notes |
 |---|---|---|---|
-| Grouped holdout (default, C=1.0, cw=None) | 89.38% | 76.4% | Primary metric |
-| Grouped holdout (tuned, C=1.0, cw=balanced) | 89.38% | 78.3% | Same accuracy, higher macro F1 |
-| Repeated grouped mean (tuned, 5 splits) | 87.46% | 72.6% | Variance-stabilised |
-| Balanced unseen holdout (tuned) | 85.42% | 82.5% | Rare-class stress test |
-| Baseline (vendor + item exact lookup) | 74.77% | - | Memorisation ceiling |
+| Grouped holdout (default, `C=1.0`, no class weighting) | 89.38% | 76.4% | Primary leakage-safe estimate |
+| Grouped holdout (tuned, `class_weight='balanced'`) | 89.38% | 78.3% | Same accuracy, better minority balance |
+| Repeated grouped mean (5 splits) | 87.46% | 72.6% | More stable estimate across splits |
+| Balanced unseen holdout | 85.42% | 82.5% | Rare-class stress test |
 | Random holdout | 89.48% | 77.6% | Optimistic reference |
+| Baseline lookup (vendor + exact item) | 74.77% | - | Naive memorisation baseline |
 
-**Key takeaway**: 14.6 percentage points above the naive lookup baseline on the honest metric. The balanced unseen holdout confirms the model generalises to rare labels (85.4% on 64 minority categories).
+The strongest business-facing result is the **89.38% grouped holdout accuracy**, because it reflects the most realistic deployment scenario. Relative to the baseline lookup system, this is an improvement of **14.6 percentage points**.
 
-### Error Analysis by Class Frequency
+### Breakdown by Category Performance
+
+Performance was strongest on medium-frequency and high-frequency categories, where the model had enough examples to learn stable text and vendor patterns.
 
 | Frequency Bucket | Test Samples | Accuracy |
 |---|---|---|
-| singleton (n=1) | 3 | 100.0% |
-| very_rare (2-4) | 7 | 71.4% |
-| rare (5-19) | 91 | 83.5% |
-| medium (20-99) | 313 | 93.3% |
-| frequent (100+) | 525 | 88.8% |
+| singleton (`n=1`) | 3 | 100.0% |
+| very rare (`2-4`) | 7 | 71.4% |
+| rare (`5-19`) | 91 | 83.5% |
+| medium (`20-99`) | 313 | 93.3% |
+| frequent (`100+`) | 525 | 88.8% |
 
-The gap is concentrated in the `rare` and `very_rare` buckets - driven by data scarcity, not model architecture. This is consistent with the learning curve showing validation accuracy still improving at 100% training data.
+The strongest and most reliable performance appears in the **medium-frequency** and **frequent** buckets. The weakest region is the long tail, especially labels with fewer than 5 examples. That is expected and consistent with the data scarcity discovered during EDA.
 
-### Overfitting Diagnosis
+### Error Analysis
 
-- Train accuracy: 0.984
-- Grouped validation accuracy: 0.894
-- Gap: 0.090
+The model does not appear to be failing because of a poor algorithmic choice; instead, most residual error comes from the inherent difficulty of the long-tail label distribution.
 
-Root causes:
-1. High-dimensional char TF-IDF (3-5gram) memorises phrase patterns seen only in training
-2. 34 labels have fewer than 5 training examples - irreducible gap from data scarcity
-3. The learning curve shows validation accuracy improving from 0.59 (20% data) to 0.89 (100% data) with train accuracy fixed at 0.99 throughout - data scarcity is the bottleneck, not regularisation
+Key overfitting diagnostics:
 
----
+- Train accuracy: **0.984**
+- Grouped validation accuracy: **0.894**
+- Gap: **0.090**
 
-## 4. Design Decisions
+This gap indicates moderate overfitting, but the diagnostics suggest the root cause is mostly limited data for minority labels rather than uncontrolled model complexity. The main reasons are:
 
-### Why LinearSVC, not a transformer model?
+1. Character n-grams can partially memorise phrase templates seen in training.
+2. **34 of 103 labels** have fewer than 5 training examples.
+3. Learning-curve analysis shows validation performance continues to improve as more data is added, indicating that data scarcity remains the main bottleneck.
 
-The dataset has 4,894 records across 103 classes - median 47 samples per class. A pre-trained transformer would need fine-tuning on this data volume, and domain-specific financial jargon (account codes, vendor abbreviations) is unlikely to be well-represented in general-purpose embeddings. LinearSVC on TF-IDF is fast, interpretable, and empirically strong for this type of problem.
-
-### Why grouped splits, not stratified k-fold?
-
-`StratifiedGroupKFold` is infeasible here: 16 labels are singletons and 34 labels have fewer than 5 examples. Enforcing both stratification and group non-overlap produces degenerate splits for minority classes. The primary evaluation uses `GroupShuffleSplit` on normalised `itemName`; the balanced unseen holdout provides the minority-class complement.
-
-### Why char n-grams alongside word n-grams?
-
-Expense descriptions contain many abbreviations (`GAM`, `SG`, `0227`), partial dates, and inconsistent formatting. Character 3-5grams on word-boundary-padded text (`char_wb`) capture these patterns robustly without requiring normalisation of every variant.
-
-### Why oversample instead of class_weight for imbalance?
-
-`class_weight='balanced'` rescales the SVM loss globally and is applied at training time. Oversampling duplicates minority-class rows in the training fold to a minimum count threshold, giving the SVC more actual gradient signal for rare classes. The two-stage tuning explores both independently and in combination.
-
-### Why a confidence fallback instead of always predicting the top class?
-
-On genuinely novel transactions, the LinearSVC can produce low-margin predictions that are no better than a vendor prior. The calibrated fallback recovers gracefully: if the model's confidence is below the threshold, return the most common account for that vendor. In production this reduces silent errors on out-of-distribution inputs.
+Overall, the results show a model that is clearly production-viable for assisted classification, while still leaving room for improvement on rare categories.
 
 ---
 
-## 5. Files
+## Discussion
 
-| File | Purpose |
-|---|---|
-| `src/feature_engineering_pipeline.py` | JSON loading, text normalisation, all feature transformers |
-| `src/training_pipeline.py` | Training, evaluation, tuning, diagnostics, report generation |
-| `src/inference_pipeline.py` | `CalibratedPredictor`, predict API, save/load |
-| `src/tracker.py` | MLflow 3.x tracking wrapper, registry, one-click retrain, server launcher |
-| `main.py` | CLI entrypoint - auto-starts MLflow server and runs tracked pipeline |
-| `notebooks/expense_classification_report.ipynb` | End-to-end interactive report |
-| `artifacts/evaluation_summary.json` | Full metrics from the last pipeline run |
-| `artifacts/account_classifier.joblib` | Serialised trained model |
-| `.docs/03_results.md` | Auto-generated formatted results report (overwritten each run) |
+### Strengths of the Approach
+
+This approach has several practical strengths.
+
+First, it is **accurate enough to meet the business target** under a realistic validation design. Second, it is **efficient and reproducible**: the full pipeline can be retrained in one command, tracked with MLflow, and exported as a `joblib` artifact. Third, it is **well-aligned with the data shape**: sparse text models are a strong fit for short transactional text plus structured features. Finally, it is **interpretable enough for finance operations**, where stakeholders may care about why a prediction is being made and where failures are likely to occur.
+
+### Limitations
+
+The biggest limitation is the long-tail class distribution. Some labels simply do not have enough examples to estimate reliable decision boundaries. That makes rare-class performance noisy and limits how much any classical supervised model can generalize.
+
+Another limitation is that the grouped split controls for item-name leakage, but it is still possible that some business concepts remain easier in the training data than in future production traffic. In other words, the validation design is much better than a random split, but it is still an offline estimate.
+
+Finally, the current system predicts a single label from the historical taxonomy. If the business introduces new account categories or significant vendor behavior changes, the model would need retraining and possibly a stronger fallback or human-review policy.
+
+### Ideas for Improvement
+
+With more time and resources, I would prioritise the following improvements:
+
+- **Collect more examples for rare categories**, since the learning curves suggest more data would help directly.
+- **Introduce hierarchical or account-code-aware modeling**, so similar account groups can share signal.
+- **Add active-learning or human-in-the-loop review** for low-confidence predictions.
+- **Experiment with stronger text representations**, such as lightweight sentence embeddings or domain-adapted encoders, but only under the same grouped validation discipline.
+- **Calibrate confidence thresholds more explicitly by business cost**, so different error types can trigger different workflows.
+
+### Business Considerations for Deployment
+
+From a business perspective, this model is best positioned as a **decision-support system** rather than a fully autonomous accountant. High-confidence predictions can be auto-suggested or auto-filled, while low-confidence cases can route to finance reviewers. This would reduce manual effort without requiring full trust in every edge case.
+
+The vendor-majority fallback is also useful operationally because it creates graceful degradation when the model is uncertain. In a live setting, I would monitor:
+
+- prediction confidence distribution
+- drift in vendor-account relationships
+- error rates by category frequency
+- low-confidence review rates
+- retraining cadence as new labeled transactions arrive
+
+In summary, the solution meets the assignment goal, uses a rigorous validation strategy, and is credible as a deployable finance-assist classifier. The remaining gap to stronger performance is driven less by modeling failure and more by limited minority-class data.
 
