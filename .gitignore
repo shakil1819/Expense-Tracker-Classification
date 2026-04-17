@@ -18,6 +18,7 @@ uv.lock
 mlruns/
 mlartifacts/
 mlflow.db
+mlflow_server.log
 
 # Temporary scripts
 quick_eval*.py
