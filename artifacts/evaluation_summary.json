@@ -56,7 +56,7 @@
     ]
   },
   "baseline": {
-    "item_vendor_lookup_accuracy": 0.7364657814096016
+    "item_vendor_lookup_accuracy": 0.7405515832482125
   },
   "hyperparameter_tuning": {
     "best_C": 2.0,
